@@ -1,5 +1,4 @@
 // src/pages/Products.tsx
-
 import React, { useEffect, useState } from 'react';
 import { getProducts, getCategories } from '../services/api';
 
@@ -19,8 +18,8 @@ interface Category {
 }
 
 const Products: React.FC = () => {
-    const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<number | ''>('');
     const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +52,7 @@ const Products: React.FC = () => {
 
     return (
         <div className="container mx-auto p-4">
-            <h1 className="text-3xl font-bold mb-4">Products</h1>
+            <h1 className="text-3xl font-bold mb-4">Товары</h1>
 
             {error && <p className="text-red-500 mb-4">{error}</p>}
 

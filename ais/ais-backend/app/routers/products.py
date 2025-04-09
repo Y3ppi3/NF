@@ -19,8 +19,9 @@ def create_product(product: ProductCreate, db: Session = Depends(get_db)):
         name=product.name,
         category_id=product.category_id,
         price=product.price,
-        stock_quantity=product.stock_quantity,
+        stock_quantity=product.stock_quantity or 0,
         description=product.description,
+        created_at=datetime.utcnow(),
     )
     db.add(db_product)
     db.commit()
@@ -29,11 +30,16 @@ def create_product(product: ProductCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[ProductResponse])
-def get_products(category_id: int | None = None, db: Session = Depends(get_db)):
+def get_products(
+    category_id: int | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
     query = db.query(Product)
 
     if category_id is not None:
         query = query.filter(Product.category_id == category_id)
 
-    products = query.all()
+    products = query.offset(skip).limit(limit).all()
     return products

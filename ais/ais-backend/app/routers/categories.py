@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, logger
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Category
@@ -10,8 +11,18 @@ router = APIRouter()
 # Получение списка всех категорий
 @router.get("/", response_model=List[CategoryResponse])
 def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).all()
-    return categories
+    try:
+        categories = db.query(Category).all()
+
+        # Явная отладка
+        print(f"Найдено категорий: {len(categories)}")
+        for category in categories:
+            print(f"Категория: ID={category.id}, Название={category.name}")
+
+        return categories
+    except Exception as e:
+        print(f"Ошибка при получении категорий: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Создание новой категории
 @router.post("/", response_model=CategoryResponse)

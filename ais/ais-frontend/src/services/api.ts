@@ -75,12 +75,36 @@ export async function getProducts(url: string = '/products'): Promise<any[]> {
 /**
  * Получение списка категорий.
  */
-export async function getCategories(): Promise<any[]> {
-    const response = await fetch(`${API_ENDPOINTS.api}/categories`);
-    if (!response.ok) {
-        throw new Error('Ошибка получения категорий');
+
+interface Category {
+    id: number;
+    name: string;
+    parent_category_id: number | null;
+}
+
+export async function getCategories(): Promise<Category[]> {
+    try {
+        const response = await fetch(`${API_ENDPOINTS}$categories}/`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Ошибка ответа:', response.status, errorText);
+            throw new Error(`Ошибка получения категорий: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Полученные категории:', data);
+        return data;
+    } catch (error) {
+        console.error('Ошибка получения категорий:', error);
+        throw error;
     }
-    return await response.json();
 }
 
 /**
