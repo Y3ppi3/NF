@@ -1,233 +1,250 @@
-# Север-Рыба и АИС
+# Север-Рыба: Система управления и клиентская часть
 
-## Описание проекта
+![Логотип проекта](./ais/ais-frontend/public/logo.png)
 
-Интегрированная система для компании "Север-Рыба", состоящая из двух основных компонентов:
+## Обзор проекта
 
-1. **Клиентская часть (Север-Рыба)** - интернет-магазин морепродуктов с каталогом товаров, корзиной покупок и системой оформления заказов
-2. **Административная панель (АИС)** - система управления товарами, заказами, платежами и аналитикой для администраторов компании
+Данный проект представляет собой комплексное решение для управления рыбным производством и магазином "Север-Рыба". Система состоит из нескольких компонентов:
 
-## Архитектура проекта
+1. **Sever-Fish** - Клиентская часть для покупателей (фронтенд и бэкенд)
+2. **AIS (Административная Информационная Система)** - Система управления для сотрудников
+3. **API Gateway** - Интеграционный слой между системами
 
-Проект использует микросервисную архитектуру с API Gateway:
+## Архитектура решения
 
-- **Frontend**:
-  - Север-Рыба (React + Tailwind CSS)
-  - АИС Frontend (React + Tailwind CSS)
-- **Backend**:
-  - Север-Рыба API (FastAPI)
-  - АИС API (FastAPI)
-- **API Gateway** - единая точка входа для всех API
+```
+┌─────────────────┐    ┌─────────────────┐
+│                 │    │                 │
+│  Sever-Fish     │    │  AIS            │
+│  Frontend       │    │  Frontend       │
+│  (Клиентская    │    │  (Админ-        │
+│   часть)        │    │   панель)       │
+│                 │    │                 │
+└────────┬────────┘    └────────┬────────┘
+         │                      │
+         │                      │
+         │                      │
+┌────────▼────────┐    ┌────────▼────────┐
+│                 │    │                 │
+│  Sever-Fish     │    │  AIS            │
+│  Backend        │    │  Backend        │
+│  (API)          │    │  (API)          │
+│                 │    │                 │
+└────────┬────────┘    └────────┬────────┘
+         │                      │
+         └──────────┬───────────┘
+                    │
+          ┌─────────▼─────────┐
+          │                   │
+          │   API Gateway     │
+          │                   │
+          └─────────┬─────────┘
+                    │
+          ┌─────────▼─────────┐
+          │                   │
+          │   PostgreSQL DB   │
+          │                   │
+          └───────────────────┘
+```
 
 ## Технологический стек
 
-### Frontend
-- TypeScript
-- React
-- React Router
-- Tailwind CSS
-- Vite
+### Фронтенд
+- **React** + **TypeScript**
+- **TailwindCSS** для стилизации
+- **Vite** для сборки
 
-### Backend
-- Python 3.10+
-- FastAPI
-- SQLAlchemy ORM
-- Pydantic
-- Alembic (миграции)
-- PostgreSQL
+### Бэкенд
+- **FastAPI** (Python)
+- **SQLAlchemy** для ORM
+- **Alembic** для миграций
 
-### Инфраструктура
-- API Gateway (FastAPI)
-- Uvicorn (ASGI-сервер)
+### Интеграция
+- **API Gateway** на FastAPI
 
-## Установка и запуск
+### База данных
+- **PostgreSQL**
+
+## Начало работы
 
 ### Предварительные требования
-- Python 3.10+
+
+- Python 3.9+
 - Node.js 16+
-- npm 8+
 - PostgreSQL 13+
 
-### Установка зависимостей
+### Установка и запуск
 
-#### Backend Север-Рыба
+#### 1. Клонирование репозитория
+
+```bash
+git clone https://your-repository-url/nf.git
+cd nf
+```
+
+#### 2. Настройка окружения для бэкенда
+
+##### Sever-Fish Бэкенд
 ```bash
 cd Sever-Fish/backend
 python -m venv .venv
-.venv\Scripts\activate  # На Windows
-source .venv/bin/activate  # На Unix/MacOS
+source .venv/bin/activate  # На Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Настройка БД
+alembic upgrade head
+
+# Запуск сервера
+python main.py
 ```
 
-#### Frontend Север-Рыба
-```bash
-cd Sever-Fish/frontend
-npm install
-```
-
-#### Backend АИС
+##### AIS Бэкенд
 ```bash
 cd ais/ais-backend
 python -m venv .venv
-.venv\Scripts\activate  # На Windows
-source .venv/bin/activate  # На Unix/MacOS
+source .venv/bin/activate  # На Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-#### Frontend АИС
-```bash
-cd ais/ais-frontend
-npm install
-```
-
-#### API Gateway
-```bash
-cd api-gateway
-python -m venv .venv
-.venv\Scripts\activate  # На Windows
-source .venv/bin/activate  # На Unix/MacOS
-pip install -r requirements.txt
-```
-
-### Настройка базы данных
-
-1. Создайте БД PostgreSQL
-2. Настройте переменные окружения в файлах .env:
-   - `Sever-Fish/backend/.env`
-   - `ais/ais-backend/.env`
-   - `api-gateway/.env`
-
-Пример файла .env для Backend:
-```
-DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/sever_ryba_db
-SECRET_KEY=your_secret_key_here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-```
-
-### Миграции
-
-Применение миграций для Север-Рыба:
-```bash
-cd Sever-Fish/backend
+# Настройка БД
 alembic upgrade head
+
+# Создание администратора
+python init_admin.py
+
+# Запуск сервера
+uvicorn app.main:app --reload
 ```
 
-Применение миграций для АИС:
-```bash
-cd ais/ais-backend
-alembic upgrade head
-```
+#### 3. Настройка окружения для фронтенда
 
-### Запуск
-
-Для удобства запуска предусмотрены BAT-скрипты (для Windows):
-
-- `run-all.bat` - запускает все компоненты системы
-- `run-ais-backend.bat` - запускает только АИС API
-- `run-api-gateway.bat` - запускает только API Gateway
-- `run-ais-frontend.bat` - запускает только АИС Frontend
-- `run-sever-ryba-frontend.bat` - запускает только Север-Рыба Frontend
-- `simple-start-all.bat` - запускает все компоненты (упрощенная версия)
-- `simple-stop-all.bat` - останавливает все запущенные компоненты
-
-#### Запуск вручную
-
-**Север-Рыба API**:
-```bash
-cd Sever-Fish/backend
-uvicorn main:app --reload --port 8000
-```
-
-**Север-Рыба Frontend**:
+##### Sever-Fish Фронтенд
 ```bash
 cd Sever-Fish/frontend
+npm install
 npm run dev
 ```
 
-**АИС API**:
-```bash
-cd ais/ais-backend
-uvicorn app.main:app --reload --port 8001
-```
-
-**АИС Frontend**:
+##### AIS Фронтенд
 ```bash
 cd ais/ais-frontend
-npm run dev -- --port 3000
+npm install
+npm run dev
 ```
 
-**API Gateway**:
+#### 4. Настройка API Gateway
+
 ```bash
 cd api-gateway
-uvicorn main:app --reload --port 8080
+python -m venv .venv
+source .venv/bin/activate  # На Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Запуск
+uvicorn main:app --reload
+```
+
+### Быстрый запуск через скрипты (Windows)
+
+Для удобства в проекте есть bat-файлы:
+
+```
+run-all.bat           # Запускает все компоненты
+run-ais-backend.bat   # Запускает только AIS бэкенд
+run-ais-frontend.bat  # Запускает только AIS фронтенд
+run-api-gateway.bat   # Запускает API Gateway
+run-sever-ryba-frontend.bat  # Запускает клиентский фронтенд
 ```
 
 ## Структура проекта
 
 ```
-.
-├── Sever-Fish             # Клиентская часть
-│   ├── backend            # Backend API для интернет-магазина
-│   └── frontend           # Frontend интернет-магазина
-├── ais                    # Административная панель
-│   ├── ais-backend        # Backend API для администраторов
-│   └── ais-frontend       # Frontend административной панели
-├── api-gateway            # API Gateway для интеграции сервисов
-├── logs                   # Логи приложений
-└── *.bat                  # Скрипты для запуска компонентов
+/NF
+├── Sever-Fish/              # Клиентская часть
+│   ├── backend/             # API для клиентского приложения
+│   │   ├── migrations/      # Миграции БД
+│   │   ├── models.py        # Модели данных
+│   │   ├── routers/         # Эндпоинты API
+│   │   ├── schemas.py       # Схемы валидации Pydantic
+│   │   └── main.py          # Точка входа
+│   │
+│   └── frontend/            # Клиентский веб-интерфейс
+│       ├── public/          # Статические файлы
+│       └── src/             # Исходный код React
+│
+├── ais/                     # Административная система
+│   ├── ais-backend/         # API для админки
+│   │   ├── app/             # Основной код
+│   │   │   ├── models.py    # Модели данных
+│   │   │   ├── routers/     # Эндпоинты API
+│   │   │   └── schemas.py   # Схемы Pydantic
+│   │   └── alembic/         # Миграции БД
+│   │
+│   └── ais-frontend/        # Административный веб-интерфейс
+│       ├── public/          # Статические файлы
+│       └── src/             # Исходный код React
+│
+├── api-gateway/             # Интеграционный слой
+│   └── main.py              # Код API Gateway
+│
+└── *.bat                    # Скрипты для запуска компонентов
 ```
 
-## Основные функции
+## Основные функциональности
 
-### Север-Рыба (интернет-магазин)
-- Каталог товаров с категориями
-- Детальные страницы товаров
+### Клиентская часть (Sever-Fish)
+- Каталог товаров
 - Корзина покупок
-- Оформление заказа
+- Оформление заказов
 - Личный кабинет пользователя
-- Страницы "О компании", "Производство", "Рецепты", "Контакты"
+- История заказов
 
-### АИС (административная панель)
+### Административная часть (AIS)
 - Управление товарами и категориями
-- Управление заказами и отслеживание статуса
-- Управление платежами
+- Управление заказами
 - Аналитика продаж
 - Синхронизация данных между системами
+- Управление пользователями
 
 ## Разработка
 
-### Создание миграций
+### Добавление новых миграций
 
-Для Север-Рыба:
+#### Sever-Fish
 ```bash
 cd Sever-Fish/backend
-alembic revision --autogenerate -m "Описание изменений"
+alembic revision --autogenerate -m "описание изменений"
+alembic upgrade head
 ```
 
-Для АИС:
+#### AIS
 ```bash
 cd ais/ais-backend
-alembic revision --autogenerate -m "Описание изменений"
+alembic revision --autogenerate -m "описание изменений"
+alembic upgrade head
 ```
+
+### Доступ к API
+
+- Sever-Fish API: http://localhost:8000
+- AIS API: http://localhost:8001
+- API Gateway: http://localhost:8080
 
 ### Документация API
 
-После запуска сервисов, документация API доступна по следующим адресам:
-- Север-Рыба API: http://localhost:8000/docs
-- АИС API: http://localhost:8001/docs
+- Sever-Fish API: http://localhost:8000/docs
+- AIS API: http://localhost:8001/docs
 - API Gateway: http://localhost:8080/docs
 
-### АИС
-- Логин: admin
-- Пароль: admin1234
+## Данные для входа
+
+### AIS (административная панель)
+- Username: main_admin
+- Password: qwerty123
 
 ## Лицензия
 
-Проект разработан для внутреннего использования компании "Север-Рыба" и не подлежит распространению без согласия владельцев.
+[Укажите лицензию Вашего проекта]
 
-## Контакты
+## Авторы
 
-По вопросам сотрудничества и технической поддержки обращайтесь:
-- Email: info@sever-ryba.ru
-- Телефон: +7 (815) 123-45-67
+[Ваша информация]
