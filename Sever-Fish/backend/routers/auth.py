@@ -1,284 +1,228 @@
-from fastapi import APIRouter, HTTPException, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Form, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.context import CryptContext
-from jose import jwt, JWTError
-from datetime import datetime, timedelta, date
-from sqlalchemy.orm import Session
+from typing import Dict, Optional, Union
+from datetime import datetime, timedelta
+import logging
 from database import get_db
-from models import User
-from typing import Optional
-from schemas import UserBirthdayUpdate, UserProfileUpdate
-from dotenv import load_dotenv
-import os
+import psycopg2.extras
+import traceback
+from pydantic import BaseModel, EmailStr  # Добавляем EmailStr для валидации email
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+# Fix import to use your local auth functions
+from utils.auth import verify_password, create_access_token, get_password_hash  # Use absolute imports
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Настройка логирования
+logger = logging.getLogger(__name__)
+
+# Создаем роутер
+router = APIRouter()
+
+# Настройка OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Настройка JWT
-SECRET_KEY = SECRET_KEY  # В реальном приложении используйте безопасный ключ
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+# Новая модель для входа через JSON 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
-# Функция создания JWT-токена
-def create_access_token(data: dict, expires_delta: timedelta):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + expires_delta
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+# Модель для регистрации пользователя
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: str  # Используем EmailStr для автоматической валидации
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
 
-# Функция получения текущего пользователя
-async def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Учетные данные недействительны",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+# Маршрут для регистрации пользователя
+@router.post("/register")
+async def register(
+    user_data: RegisterRequest,
+    db = Depends(get_db)
+):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
-    return user
-
-# Класс для данных входа
-class LoginData:
-    def __init__(self, phone: str, password: str):
-        self.phone = phone
-        self.password = password
-
-# Класс для данных регистрации
-class UserRegister:
-    def __init__(self, username: str, password: str, password_confirm: str, 
-                 email: str, phone: str, full_name: str, birthday: Optional[date] = None):
-        self.username = username
-        self.password = password
-        self.password_confirm = password_confirm
-        self.email = email
-        self.phone = phone
-        self.full_name = full_name
-        self.birthday = birthday
-
-# Регистрация пользователя
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register_user(user_data: dict, db: Session = Depends(get_db)):
-    # Преобразуем дату рождения из строки в объект date, если она есть
-    birthday = None
-    if user_data.get("birthday"):
-        try:
-            birthday = datetime.strptime(user_data.get("birthday"), "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Неверный формат даты рождения. Используйте формат YYYY-MM-DD")
-    
-    # Создаем объект из данных
-    user = UserRegister(
-        username=user_data.get("username"),
-        password=user_data.get("password"),
-        password_confirm=user_data.get("password_confirm"),
-        email=user_data.get("email"),
-        phone=user_data.get("phone"),
-        full_name=user_data.get("full_name"),
-        birthday=birthday
-    )
-    
-    # Проверка совпадения паролей
-    if user.password != user.password_confirm:
-        raise HTTPException(status_code=400, detail="Пароли не совпадают")
-    
-    # Проверка, существует ли пользователь с таким именем
-    existing_user = db.query(User).filter(User.username == user.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Пользователь с таким именем уже существует")
-    
-    # Проверка, существует ли пользователь с таким email
-    existing_email = db.query(User).filter(User.email == user.email).first()
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
-    
-    # Проверка, существует ли пользователь с таким телефоном
-    existing_phone = db.query(User).filter(User.phone == user.phone).first()
-    if existing_phone:
-        raise HTTPException(status_code=400, detail="Пользователь с таким номером телефона уже существует")
-    
-    # Хеширование пароля
-    hashed_password = pwd_context.hash(user.password)
-    
-    # Создание нового пользователя
-    new_user = User(
-        username=user.username,
-        email=user.email,
-        phone=user.phone,
-        full_name=user.full_name,
-        password_hash=hashed_password,
-        birthday=user.birthday
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return {"message": "Пользователь успешно зарегистрирован"}
-
-# Вход пользователя
-@router.post("/login")
-async def login(login_data: dict, db: Session = Depends(get_db)):
-    # Создаем объект из данных
-    user_login = LoginData(
-        phone=login_data.get("phone"),
-        password=login_data.get("password")
-    )
-    
-    # Поиск пользователя по номеру телефона
-    user = db.query(User).filter(User.phone == user_login.phone).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный номер телефона или пароль",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Проверка пароля
-    is_password_correct = pwd_context.verify(user_login.password, user.password_hash)
-    if not is_password_correct:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный номер телефона или пароль",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Создание токена доступа
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-# Получение профиля пользователя
-@router.get("/profile")
-async def get_user_profile(current_user: User = Depends(get_current_user)):
-    user_data = {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "phone": current_user.phone,
-        "full_name": current_user.full_name
-    }
-    
-    # Добавляем дату рождения, если она есть
-    if current_user.birthday:
-        user_data["birthday"] = current_user.birthday.isoformat()
+        # Проверяем уникальность email и телефона
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
-        # Проверяем, есть ли у пользователя скидка в день рождения
-        today = datetime.now().date()
-        birthday_this_year = date(today.year, current_user.birthday.month, current_user.birthday.day)
+        # Проверка email
+        cursor.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
+        existing_email = cursor.fetchone()
         
-        # Если день рождения в текущем году уже прошел, проверяем прошлую неделю
-        days_diff = (today - birthday_this_year).days
-        
-        if 0 <= days_diff <= 7:  # День рождения сегодня или был в течение последних 7 дней
-            user_data["has_birthday_discount"] = True
-        else:
-            user_data["has_birthday_discount"] = False
-            
-        # Добавляем количество дней до следующего дня рождения
-        if days_diff < 0:  # День рождения еще не наступил в этом году
-            user_data["days_until_birthday"] = abs(days_diff)
-        else:  # День рождения уже прошел, считаем до следующего года
-            next_birthday = date(today.year + 1, current_user.birthday.month, current_user.birthday.day)
-            user_data["days_until_birthday"] = (next_birthday - today).days
-    
-    return user_data
-
-# Обновление профиля пользователя
-@router.put("/profile")
-async def update_user_profile(profile_data: UserProfileUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Получаем пользователя из базы данных
-    user = db.query(User).filter(User.id == current_user.id).first()
-    
-    # Обновляем данные пользователя
-    if profile_data.full_name is not None:
-        user.full_name = profile_data.full_name
-    
-    if profile_data.email is not None:
-        # Проверяем, не занят ли email другим пользователем
-        existing_email = db.query(User).filter(User.email == profile_data.email, User.id != user.id).first()
         if existing_email:
-            raise HTTPException(status_code=400, detail="Пользователь с таким email уже существует")
-        user.email = profile_data.email
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Пользователь с таким email уже существует"
+            )
+        
+        # Проверка телефона, если он указан
+        if user_data.phone:
+            cursor.execute("SELECT id FROM users WHERE phone = %s", (user_data.phone,))
+            existing_phone = cursor.fetchone()
+            
+            if existing_phone:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Пользователь с таким номером телефона уже существует"
+                )
+        
+        # Проверка на наличие email
+        if not user_data.email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email обязателен для регистрации"
+            )
+        
+        # Хешируем пароль перед сохранением
+        hashed_password = get_password_hash(user_data.password)
+        
+        # Создаем пользователя
+        insert_query = """
+        INSERT INTO users (username, password_hash, full_name, email, phone, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        RETURNING id, username, full_name, email, phone
+        """
+        cursor.execute(
+            insert_query,
+            (user_data.username, hashed_password, user_data.full_name, user_data.email, user_data.phone)
+        )
+        db.commit()
+        
+        new_user = cursor.fetchone()
+        
+        # Создаем JWT токен для нового пользователя
+        token_data = {"sub": user_data.username, "user_id": new_user['id']}
+        access_token = create_access_token(token_data)
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": new_user['id'],
+                "username": new_user['username'],
+                "full_name": new_user.get('full_name'),
+                "email": new_user.get('email'),
+                "phone": new_user.get('phone')
+            }
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Ошибка при регистрации пользователя: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка сервера при регистрации пользователя: {str(e)}"
+        )
+
+# Создаем специальный эндпоинт для формы OAuth2
+@router.post("/oauth/token")
+async def login_oauth(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db = Depends(get_db)
+):
+    username = form_data.username
+    password = form_data.password
     
-    if profile_data.phone is not None:
-        # Проверяем, не занят ли телефон другим пользователем
-        existing_phone = db.query(User).filter(User.phone == profile_data.phone, User.id != user.id).first()
-        if existing_phone:
-            raise HTTPException(status_code=400, detail="Пользователь с таким номером телефона уже существует")
-        user.phone = profile_data.phone
+    # Ищем пользователя в базе данных
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute(
+        "SELECT id, username, password_hash, full_name, email, phone FROM users WHERE username = %s",
+        (username,)
+    )
+    user = cursor.fetchone()
     
-    # Сохраняем изменения
-    db.commit()
-    db.refresh(user)
+    if not user or not verify_password(password, user['password_hash']):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверное имя пользователя или пароль",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
-    # Возвращаем обновленные данные
+    # Создаем JWT токен
+    token_data = {"sub": user['username'], "user_id": user['id']}
+    access_token = create_access_token(token_data)
+    
     return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "phone": user.phone,
-        "full_name": user.full_name,
-        "birthday": user.birthday.isoformat() if user.birthday else None
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
-# Отдельный эндпоинт для обновления даты рождения
-@router.put("/profile/birthday")
-async def update_birthday(birthday_data: UserBirthdayUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Получаем пользователя из базы данных
-    user = db.query(User).filter(User.id == current_user.id).first()
-    
-    # Обновляем дату рождения
-    user.birthday = birthday_data.birthday
-    
-    # Сохраняем изменения
-    db.commit()
-    db.refresh(user)
-    
-    # Возвращаем обновленные данные
-    user_data = {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "phone": user.phone,
-        "full_name": user.full_name,
-        "birthday": user.birthday.isoformat() if user.birthday else None
-    }
-    
-    if user.birthday:
-        # Проверяем, есть ли у пользователя скидка в день рождения
-        today = datetime.now().date()
-        birthday_this_year = date(today.year, user.birthday.month, user.birthday.day)
+# Маршрут для входа через JSON
+@router.post("/login")
+async def login_json(
+    login_data: LoginRequest,
+    db = Depends(get_db)
+):
+    try:
+        logger.info(f"Попытка входа для пользователя: {login_data.username}")
         
-        # Если день рождения в текущем году уже прошел, проверяем прошлую неделю
-        days_diff = (today - birthday_this_year).days
+        # Вначале ищем по номеру телефона
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
-        if 0 <= days_diff <= 7:  # День рождения сегодня или был в течение последних 7 дней
-            user_data["has_birthday_discount"] = True
-        else:
-            user_data["has_birthday_discount"] = False
+        # Проверяем, может быть это номер телефона
+        cursor.execute(
+            "SELECT id, username, password_hash, full_name, email, phone FROM users WHERE phone = %s",
+            (login_data.username,)
+        )
+        user = cursor.fetchone()
+        
+        # Если пользователь не найден по телефону, ищем по username
+        if not user:
+            cursor.execute(
+                "SELECT id, username, password_hash, full_name, email, phone FROM users WHERE username = %s",
+                (login_data.username,)
+            )
+            user = cursor.fetchone()
             
-        # Добавляем количество дней до следующего дня рождения
-        if days_diff < 0:  # День рождения еще не наступил в этом году
-            user_data["days_until_birthday"] = abs(days_diff)
-        else:  # День рождения уже прошел, считаем до следующего года
-            next_birthday = date(today.year + 1, user.birthday.month, user.birthday.day)
-            user_data["days_until_birthday"] = (next_birthday - today).days
-    
-    return user_data
+        # Если пользователь не найден ни по телефону, ни по username, ищем по email
+        if not user:
+            cursor.execute(
+                "SELECT id, username, password_hash, full_name, email, phone FROM users WHERE email = %s",
+                (login_data.username,)
+            )
+            user = cursor.fetchone()
+        
+        if not user:
+            logger.warning(f"Пользователь не найден: {login_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверное имя пользователя или пароль",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Проверяем пароль
+        if not verify_password(login_data.password, user['password_hash']):
+            logger.warning(f"Неверный пароль для пользователя: {login_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверное имя пользователя или пароль",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Создаем JWT токен
+        token_data = {"sub": user['username'], "user_id": user['id']}
+        access_token = create_access_token(token_data)
+        
+        logger.info(f"Успешный вход для пользователя: {login_data.username}")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user['id'],
+                "username": user['username'],
+                "full_name": user.get('full_name'),
+                "email": user.get('email'),
+                "phone": user.get('phone')
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при входе пользователя: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка сервера при входе пользователя: {str(e)}"
+        )

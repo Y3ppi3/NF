@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 const Products = ({ updateCartCount }) => {
   const [products, setProducts] = useState([]);
@@ -9,33 +9,184 @@ const Products = ({ updateCartCount }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
   const productsPerPage = 12;
+
+  // Базовый URL API
+  const API_BASE_URL = "http://127.0.0.1:8000";
+  
+  // Исправленные пути API согласно FastAPI маршрутам
+  const PRODUCTS_API = `${API_BASE_URL}/products`;
+  const CATEGORIES_API = `${API_BASE_URL}/products/categories`;
+  const CART_API = `${API_BASE_URL}/cart`;
+
+  // Функция для проверки доступных API маршрутов
+  const checkApiEndpoints = async () => {
+    try {
+      const routesRes = await axios.get(`${API_BASE_URL}/routes`);
+      console.log("Доступные маршруты API:", routesRes.data);
+      return routesRes.data;
+    } catch (error) {
+      console.error("Ошибка при получении маршрутов API:", error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      await Promise.all([fetchProducts(), fetchCategories()]);
-      setIsLoading(false);
+      setError(null);
+      
+      // Проверяем доступные маршруты API
+      await checkApiEndpoints();
+      
+      // Проверяем статус сервера
+      try {
+        const healthRes = await axios.get(`${API_BASE_URL}/health`);
+        console.log("Статус сервера:", healthRes.data);
+      } catch (healthErr) {
+        console.error("Ошибка при проверке статуса:", healthErr);
+      }
+      
+      try {
+        await Promise.all([fetchProducts(), fetchCategories()]);
+      } catch (err) {
+        console.error("Ошибка загрузки данных:", err);
+      } finally {
+        setIsLoading(false);
+      }
     };
+    
     fetchData();
   }, []);
 
   const fetchProducts = async () => {
-    try {
-      const res = await axios.get("http://127.0.0.1:8000/products");
-      setProducts(res.data);
-    } catch (error) {
-      console.error("Ошибка при загрузке продуктов:", error);
+    // Список возможных API маршрутов для продуктов
+    const productApis = [
+      PRODUCTS_API,
+      `${API_BASE_URL}/api/products`
+    ];
+    
+    for (const api of productApis) {
+      try {
+        console.log(`Попытка запроса продуктов по адресу: ${api}`);
+        const res = await axios.get(api, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        console.log("Получены продукты:", res.data);
+        setProducts(res.data);
+        setError(null);
+        return res.data;
+      } catch (error) {
+        console.error(`Ошибка при запросе к ${api}:`, error);
+        // Продолжаем пробовать другие API
+      }
     }
+    
+    // Если все попытки не удались, устанавливаем ошибку
+    setError("Не удалось загрузить товары. Проверьте работу сервера.");
+    return [];
   };
 
   const fetchCategories = async () => {
+    // Список возможных API маршрутов для категорий
+    const categoryApis = [
+      CATEGORIES_API,
+      `${API_BASE_URL}/api/categories`,
+      `${API_BASE_URL}/categories`
+    ];
+    
+    for (const api of categoryApis) {
+      try {
+        console.log(`Попытка запроса категорий по адресу: ${api}`);
+        const res = await axios.get(api, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        console.log("Получены категории:", res.data);
+        
+        // Обработка данных для совместимости
+        const processedCategories = res.data.map(cat => {
+          // Убедимся, что каждая категория имеет slug
+          if (!cat.slug && cat.name) {
+            cat.slug = cat.name.toLowerCase().replace(/\s+/g, '-');
+          }
+          return cat;
+        });
+        
+        setCategories(processedCategories);
+        setError(null);
+        return processedCategories;
+      } catch (error) {
+        console.error(`Ошибка при запросе к ${api}:`, error);
+        // Продолжаем пробовать другие API
+      }
+    }
+    
+    // Если все попытки не удались, устанавливаем ошибку
+    setError("Не удалось загрузить категории. Проверьте работу сервера.");
+    return [];
+  };
+
+  // ИСПРАВЛЕНИЕ: Правильное определение функции fetchProductsByCategory
+  const fetchProductsByCategory = async (categorySlug) => {
+    setIsLoading(true);
+    
+    // Список возможных API маршрутов для продуктов по категории
+    const categoryProductApis = [
+      `${API_BASE_URL}/products/category/${categorySlug}`,
+      `${API_BASE_URL}/api/products/category/${categorySlug}`
+    ];
+    
+    for (const api of categoryProductApis) {
+      try {
+        console.log(`Попытка запроса продуктов по категории: ${api}`);
+        const res = await axios.get(api, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        console.log("Получены продукты по категории:", res.data);
+        setProducts(res.data);
+        setError(null);
+        setIsLoading(false);
+        return;
+      } catch (error) {
+        console.error(`Ошибка при запросе к ${api}:`, error);
+        // Продолжаем пробовать другие API
+      }
+    }
+    
+    // Если не удалось получить товары по категории, пробуем загрузить все товары
     try {
-      const res = await axios.get("http://127.0.0.1:8000/products/categories/");
-      setCategories(res.data);
-    } catch (error) {
-      console.error("Ошибка при загрузке категорий:", error);
+      setError("Не удалось загрузить товары по выбранной категории. Загружаем все товары.");
+      await fetchProducts();
+    } catch (e) {
+      console.error("Также не удалось загрузить все товары:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCategorySelect = async (category) => {
+    setSelectedCategory(category.id);
+    setCurrentPage(1);
+    
+    if (category.slug) {
+      await fetchProductsByCategory(category.slug);
+    } else {
+      await fetchProducts();
     }
   };
 
@@ -53,36 +204,60 @@ const Products = ({ updateCartCount }) => {
       return;
     }
     
-    try {
-      const button = event.currentTarget;
-      // Анимация для кнопки
-      button.innerText = "Добавлено ✓";
-      button.classList.add("bg-green-600");
-      
-      // Отправляем запрос с токеном авторизации
-      await axios.post("http://127.0.0.1:8000/cart/", {
-        product_id: productId,
-        quantity: 1,
-      }, {
-        headers: {
-          'Authorization': `${tokenType} ${token}`
+    // Список возможных API маршрутов для корзины
+    const cartApis = [
+      CART_API,
+      `${API_BASE_URL}/api/cart`
+    ];
+    
+    const button = event.currentTarget;
+    // Анимация для кнопки
+    button.innerText = "Добавляем...";
+    button.classList.add("bg-yellow-600");
+    
+    for (const api of cartApis) {
+      try {
+        console.log(`Добавление товара ${productId} в корзину по адресу: ${api}`);
+        await axios.post(api, {
+          product_id: productId,
+          quantity: 1,
+        }, {
+          headers: {
+            'Authorization': `${tokenType} ${token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // Обновляем счетчик корзины
+        if (updateCartCount) {
+          updateCartCount();
         }
-      });
-      
-      updateCartCount();
-      
-      // Возвращаем исходный текст после короткой задержки
-      setTimeout(() => {
-        button.innerText = "В корзину";
-        button.classList.remove("bg-green-600");
-      }, 1500);
-    } catch (error) {
-      console.error("Ошибка при добавлении в корзину:", error);
-      // Если ошибка связана с авторизацией (401), показываем модальное окно
-      if (error.response && error.response.status === 401) {
-        setShowAuthModal(true);
+        
+        // Изменяем текст кнопки на успешный
+        button.innerText = "Добавлено ✓";
+        button.classList.remove("bg-yellow-600");
+        button.classList.add("bg-green-600");
+        
+        // Возвращаем исходный текст после короткой задержки
+        setTimeout(() => {
+          button.innerText = "В корзину";
+          button.classList.remove("bg-green-600");
+        }, 1500);
+        
+        return;
+      } catch (error) {
+        console.error(`Ошибка при добавлении в корзину по ${api}:`, error);
+        // Продолжаем пробовать другие API
       }
     }
+    
+    // Сбрасываем кнопку и показываем ошибку
+    button.innerText = "В корзину";
+    button.classList.remove("bg-yellow-600");
+    
+    // Показываем ошибку пользователю
+    setError("Не удалось добавить товар в корзину. Проверьте соединение с сервером.");
   };
 
   // Обработчик для перехода на страницу авторизации
@@ -93,7 +268,7 @@ const Products = ({ updateCartCount }) => {
   };
 
   const filteredProducts = selectedCategory
-    ? products.filter((p) => p.category_id === selectedCategory)
+    ? products.filter((p) => p.category_id?.toString() === selectedCategory)
     : products;
 
   const lastProductIndex = currentPage * productsPerPage;
@@ -102,25 +277,20 @@ const Products = ({ updateCartCount }) => {
 
   const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
 
-  // Функция для генерации границ пагинации
   const getPaginationRange = () => {
-    const delta = 2; // Количество страниц до и после текущей
+    const delta = 2;
     let range = [];
     
-    // Всегда показываем первую страницу
     range.push(1);
     
-    // Создаем диапазон вокруг текущей страницы
     for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
       range.push(i);
     }
     
-    // Всегда показываем последнюю страницу, если она существует
     if (totalPages > 1) {
       range.push(totalPages);
     }
     
-    // Добавляем многоточия, где нужно
     let result = [];
     let lastVal = 0;
     
@@ -139,8 +309,30 @@ const Products = ({ updateCartCount }) => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 my-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">Каталог продукции</h1>
       
+      {/* Отображение ошибок */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+          <strong className="font-bold">Ошибка!</strong>
+          <span className="block sm:inline"> {error}</span>
+          <button 
+            className="absolute top-0 bottom-0 right-0 px-4 py-3"
+            onClick={() => setError(null)}
+          >
+            <span className="text-red-500">×</span>
+          </button>
+        </div>
+      )}
+      
+      {/* Отладочный блок - можно удалить в продакшен */}
+      <div className="bg-gray-100 border border-gray-300 rounded p-3 mb-6 text-xs">
+        <p><strong>Адрес API:</strong> {API_BASE_URL}</p>
+        <p><strong>Маршрут продуктов:</strong> {PRODUCTS_API}</p>
+        <p><strong>Маршрут категорий:</strong> {CATEGORIES_API}</p>
+        <p><strong>Последнее обновление:</strong> {new Date().toLocaleTimeString()}</p>
+      </div>
+      
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Боковая панель с категориями - фиксированное положение */}
+        {/* Боковая панель с категориями */}
         <aside className="lg:w-1/4">
           <div className="bg-white shadow-sm rounded-lg p-5 lg:sticky lg:top-5">
             <h2 className="text-xl font-medium text-gray-800 mb-4 pb-2 border-b">Категории</h2>
@@ -150,6 +342,7 @@ const Products = ({ updateCartCount }) => {
                   onClick={() => {
                     setSelectedCategory("");
                     setCurrentPage(1);
+                    fetchProducts();
                   }}
                   className={`w-full text-left py-2 px-3 rounded transition-colors ${
                     selectedCategory === "" 
@@ -160,23 +353,24 @@ const Products = ({ updateCartCount }) => {
                   Все товары
                 </button>
               </li>
-              {categories.map((cat) => (
-                <li key={cat.id}>
-                  <button 
-                    onClick={() => {
-                      setSelectedCategory(cat.id);
-                      setCurrentPage(1);
-                    }}
-                    className={`w-full text-left py-2 px-3 rounded transition-colors ${
-                      selectedCategory === cat.id 
-                      ? "bg-blue-50 text-blue-800 font-medium" 
-                      : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    {cat.name}
-                  </button>
-                </li>
-              ))}
+              {categories.length > 0 ? (
+                categories.map((cat) => (
+                  <li key={cat.id}>
+                    <button 
+                      onClick={() => handleCategorySelect(cat)}
+                      className={`w-full text-left py-2 px-3 rounded transition-colors ${
+                        selectedCategory === cat.id?.toString() 
+                        ? "bg-blue-50 text-blue-800 font-medium" 
+                        : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <li className="text-gray-500 italic p-2">Категории не загружены</li>
+              )}
             </ul>
           </div>
         </aside>
@@ -192,7 +386,15 @@ const Products = ({ updateCartCount }) => {
             <>
               {filteredProducts.length === 0 ? (
                 <div className="text-center py-16">
-                  <p className="text-gray-500 text-lg">Товары не найдены</p>
+                  <p className="text-gray-500 text-lg">
+                    {error ? "Ошибка загрузки товаров" : "Товары не найдены"}
+                  </p>
+                  <button 
+                    onClick={fetchProducts}
+                    className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Попробовать снова
+                  </button>
                 </div>
               ) : (
                 <>
@@ -206,6 +408,10 @@ const Products = ({ updateCartCount }) => {
                               src={product.image_url || "/placeholder.jpg"}
                               alt={product.name}
                               className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                              onError={(e) => {
+                                e.target.src = "/placeholder.jpg";
+                                e.target.onerror = null;
+                              }}
                             />
                           </div>
                           <div className="p-4">

@@ -1,39 +1,40 @@
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import logging
 
-# Получаем текущую директорию
-current_dir = os.getcwd()
-print(f"Текущая рабочая директория: {current_dir}")
+logger = logging.getLogger(__name__)
 
-# Путь к .env файлу
-env_path = os.path.join(current_dir, '.env')
-print(f"Ищем .env файл по пути: {env_path}")
-print(f".env файл существует: {os.path.exists(env_path)}")
+# Обновляем параметры подключения к базе данных PostgreSQL
+DB_HOST = "localhost"
+DB_PORT = "5432"
+DB_NAME = "sever_ryba_db"   # Исправлено с sever_fish_db на sever_ryba_db
+DB_USER = "katarymba"
+DB_PASSWORD = "root"
 
-# Загружаем переменные окружения из .env файла
-dotenv_result = load_dotenv(env_path)
-print(f"Результат загрузки .env: {dotenv_result}")
-
-# Получаем URL базы данных из переменных окружения
-DATABASE_URL = os.getenv("DATABASE_URL")
-print(f"Полученный DATABASE_URL: {DATABASE_URL}")
-
-# Создаем движок SQLAlchemy
-engine = create_engine(DATABASE_URL)
-
-# Создаем сессию
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Создаем базовый класс для моделей
-Base = declarative_base()
-
-# Функция получения сессии базы данных
-def get_db():
-    db = SessionLocal()
+def get_db_connection():
+    """
+    Создает и возвращает соединение с базой данных
+    """
     try:
-        yield db
+        conn = psycopg2.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            cursor_factory=RealDictCursor  # Возвращает результаты как словари
+        )
+        return conn
+    except Exception as e:
+        logger.error(f"Ошибка подключения к базе данных: {str(e)}")
+        raise e
+
+def get_db():
+    """
+    Функция-зависимость для создания и закрытия соединения с БД
+    """
+    conn = get_db_connection()
+    try:
+        yield conn
     finally:
-        db.close()
+        conn.close()

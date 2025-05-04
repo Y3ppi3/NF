@@ -20,19 +20,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade():
-    # Add missing columns to users table
-    op.add_column('users', sa.Column('phone', sa.String(), nullable=False))
+    # Add missing columns to users table - с изменением для phone, теперь с server_default
+    op.add_column('users', sa.Column('phone', sa.String(), nullable=False, server_default='not_provided'))
     op.add_column('users', sa.Column('full_name', sa.String(), nullable=True))
     op.add_column('users', sa.Column('is_active', sa.Boolean(), nullable=False, server_default='true'))
 
     # Create a unique index on phone to ensure uniqueness
     op.create_index(op.f('ix_users_phone'), 'users', ['phone'], unique=True)
-
-    # Remove the role column if you decide to go that route
-    # op.drop_column('users', 'role')
-
-    # You might need to populate the phone field with default values
-    # for existing users, since we're making it non-nullable
 
 
 def downgrade():
