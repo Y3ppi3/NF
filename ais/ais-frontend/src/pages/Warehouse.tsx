@@ -132,7 +132,7 @@ interface ProductFilter {
 }
 
 // URL для API
-const API_BASE_URL = 'http://localhost:8080/api/warehouse';
+const API_BASE_URL = 'http://localhost:8080/ais/warehouse';
 
 // Текущая дата и время для системы
 const CURRENT_DATE = '2025-05-05 14:37:40';
