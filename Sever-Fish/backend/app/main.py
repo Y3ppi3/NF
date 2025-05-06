@@ -27,8 +27,6 @@ app = FastAPI(
     title=f"{PROJECT_NAME} API",
     description="API для системы управления продажами и запасами морепродуктов",
     version=PROJECT_VERSION,
-    docs_url="/docs" if DEBUG else None,  # Отключаем /docs в продакшн
-    redoc_url="/redoc" if DEBUG else None,  # Отключаем /redoc в продакшн
 )
 
 # Настройка CORS
@@ -151,7 +149,6 @@ async def root():
         "app": PROJECT_NAME,
         "version": PROJECT_VERSION,
         "message": "Добро пожаловать в API Север-Рыба!",
-        "docs": "/docs" if DEBUG else None,
         "status": "online",
         "time": datetime.utcnow().isoformat()
     }

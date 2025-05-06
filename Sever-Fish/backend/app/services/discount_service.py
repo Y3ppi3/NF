@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional
-from models import User
+from app.models import User
 
 class DiscountService:
     """
