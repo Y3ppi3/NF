@@ -1,21 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from app import models, schemas
 from app.database import get_db
 from app.services import warehouse_service
 from datetime import datetime
-import uuid
 
 router = APIRouter()
-
-CURRENT_DATETIME = datetime
-CURRENT_USER = "katarymba"
 
 
 # API endpoints
 @router.get("/products", response_model=List[Dict[str, Any]])
-def get_products(db: Session = Depends(get_db)):
+def get_products(request: Request, db: Session = Depends(get_db)):
     """Get all products with their details"""
     products = db.query(models.Product).all()
 
@@ -38,8 +34,8 @@ def get_products(db: Session = Depends(get_db)):
             "unit": "кг",  # Default unit, you might want to add this to your Product model
             "price": product.price,
             "is_active": True,
-            "created_at": product.created_at.isoformat() if product.created_at else CURRENT_DATETIME,
-            "updated_at": CURRENT_DATETIME,
+            "created_at": product.created_at.isoformat() if product.created_at else datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
             "supplier": "Default Supplier",  # You might want to add this to your Product model
             "image_url": f"/images/products/SKU-{product.id:04d}.jpg",
             "sr_sync": False,
@@ -52,9 +48,19 @@ def get_products(db: Session = Depends(get_db)):
 
 
 @router.get("/stocks", response_model=List[Dict[str, Any]])
-def get_stocks(db: Session = Depends(get_db)):
+def get_stocks(request: Request, db: Session = Depends(get_db)):
     """Get all stock items with their details"""
     stocks = db.query(models.Stock).all()
+
+    # Попытка получения имени пользователя из запроса
+    current_user = None
+    try:
+        current_user = request.state.user
+    except:
+        current_user = None
+
+    # Имя пользователя по умолчанию, если не удалось получить из request
+    username = getattr(current_user, 'username', 'katarymba')
 
     # Convert to the format expected by the frontend
     result = []
@@ -76,8 +82,8 @@ def get_stocks(db: Session = Depends(get_db)):
             "minimum_quantity": 30,  # Default value, you might want to add this to your Stock model
             "reorder_level": 50,  # Default value, you might want to add this to your Stock model
             "quantity_reserved": 0,
-            "last_count_date": stock.updated_at.isoformat() if stock.updated_at else CURRENT_DATETIME,
-            "last_counted_by": CURRENT_USER,
+            "last_count_date": stock.updated_at.isoformat() if stock.updated_at else datetime.now().isoformat(),
+            "last_counted_by": username,
             "status": status
         }
         result.append(stock_data)
@@ -86,7 +92,7 @@ def get_stocks(db: Session = Depends(get_db)):
 
 
 @router.get("/warehouses", response_model=List[Dict[str, Any]])
-def get_warehouses(db: Session = Depends(get_db)):
+def get_warehouses(request: Request, db: Session = Depends(get_db)):
     """Get all warehouses with their details"""
     warehouses = db.query(models.Warehouse).all()
 
@@ -106,7 +112,7 @@ def get_warehouses(db: Session = Depends(get_db)):
 
 
 @router.get("/categories", response_model=List[Dict[str, Any]])
-def get_categories(db: Session = Depends(get_db)):
+def get_categories(request: Request, db: Session = Depends(get_db)):
     """Get all categories with their details"""
     categories = db.query(models.Category).all()
 
@@ -117,8 +123,8 @@ def get_categories(db: Session = Depends(get_db)):
             "id": str(category.id),
             "name": category.name,
             "is_active": True,
-            "created_at": CURRENT_DATETIME,
-            "updated_at": CURRENT_DATETIME,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
             "parent_id": str(category.parent_category_id) if category.parent_category_id else None
         }
         result.append(category_data)
@@ -127,9 +133,19 @@ def get_categories(db: Session = Depends(get_db)):
 
 
 @router.get("/shipments", response_model=List[Dict[str, Any]])
-def get_shipments(db: Session = Depends(get_db)):
+def get_shipments(request: Request, db: Session = Depends(get_db)):
     """Get all shipments with their details"""
     shipments = db.query(models.Shipment).all()
+
+    # Попытка получения имени пользователя из запроса
+    current_user = None
+    try:
+        current_user = request.state.user
+    except:
+        current_user = None
+
+    # Имя пользователя по умолчанию, если не удалось получить из request
+    username = getattr(current_user, 'username', 'katarymba')
 
     # Convert to the format expected by the frontend
     result = []
@@ -155,14 +171,14 @@ def get_shipments(db: Session = Depends(get_db)):
         shipment_data = {
             "id": f"SH-{shipment.id}",
             "supplier": "Default Supplier",
-            "shipment_date": shipment.created_at.isoformat() if shipment.created_at else CURRENT_DATETIME,
+            "shipment_date": shipment.created_at.isoformat() if shipment.created_at else datetime.now().isoformat(),
             "expected_arrival_date": shipment.estimated_delivery.isoformat() if shipment.estimated_delivery else None,
             "actual_arrival_date": shipment.estimated_delivery.isoformat() if shipment.status == "delivered" and shipment.estimated_delivery else None,
             "status": convert_shipment_status(shipment.status),
             "reference_number": f"PO-2025-{shipment.id:03d}",
-            "created_by": CURRENT_USER,
-            "created_at": shipment.created_at.isoformat() if shipment.created_at else CURRENT_DATETIME,
-            "updated_at": CURRENT_DATETIME,
+            "created_by": username,
+            "created_at": shipment.created_at.isoformat() if shipment.created_at else datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
             "notes": "",
             "items": items
         }
@@ -172,9 +188,19 @@ def get_shipments(db: Session = Depends(get_db)):
 
 
 @router.get("/stock-movements", response_model=List[Dict[str, Any]])
-def get_stock_movements(db: Session = Depends(get_db)):
+def get_stock_movements(request: Request, db: Session = Depends(get_db)):
     """Get all stock movements with their details"""
     movements = db.query(models.StockMovement).all()
+
+    # Попытка получения имени пользователя из запроса
+    current_user = None
+    try:
+        current_user = request.state.user
+    except:
+        current_user = None
+
+    # Имя пользователя по умолчанию, если не удалось получить из request
+    username = getattr(current_user, 'username', 'katarymba')
 
     # Convert to the format expected by the frontend
     result = []
@@ -194,8 +220,8 @@ def get_stock_movements(db: Session = Depends(get_db)):
             "movement_type": movement.movement_type,
             "reference_id": str(movement.source_warehouse_id) if movement.source_warehouse_id else None,
             "reference_type": "transfer" if movement.source_warehouse_id else None,
-            "performed_by": CURRENT_USER,
-            "movement_date": movement.created_at.isoformat() if movement.created_at else CURRENT_DATETIME,
+            "performed_by": username,
+            "movement_date": movement.created_at.isoformat() if movement.created_at else datetime.now().isoformat(),
             "notes": movement.note or ""
         }
         result.append(movement_data)
@@ -205,17 +231,28 @@ def get_stock_movements(db: Session = Depends(get_db)):
 
 # POST Endpoints
 @router.post("/products", response_model=Dict[str, Any])
-def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db)):
+def create_product(request: Request, product_data: Dict[str, Any], db: Session = Depends(get_db)):
     """Create a new product"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+
         # Extract required data from the request
+        now = datetime.now()
         new_product = models.Product(
             name=product_data.get("name"),
             category_id=int(product_data.get("category_id", 1)),
             price=float(product_data.get("price", 0)),
             stock_quantity=0,
             description=product_data.get("description", ""),
-            created_at=datetime.now()
+            created_at=now
         )
 
         db.add(new_product)
@@ -236,7 +273,7 @@ def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db)):
             "price": new_product.price,
             "is_active": True,
             "created_at": new_product.created_at.isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "updated_at": now.isoformat(),
             "supplier": product_data.get("supplier", "Default Supplier"),
             "image_url": f"/images/products/SKU-{new_product.id:04d}.jpg",
             "sr_sync": False,
@@ -251,9 +288,19 @@ def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db)):
 
 
 @router.post("/stocks", response_model=Dict[str, Any])
-def create_stock(stock_data: Dict[str, Any], db: Session = Depends(get_db)):
+def create_stock(request: Request, stock_data: Dict[str, Any], db: Session = Depends(get_db)):
     """Create a new stock entry"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+
         # Extract required data from the request
         product_id = int(stock_data.get("product_id"))
         warehouse_id = int(stock_data.get("warehouse_id"))
@@ -272,10 +319,12 @@ def create_stock(stock_data: Dict[str, Any], db: Session = Depends(get_db)):
             models.Stock.warehouse_id == warehouse_id
         ).first()
 
+        current_time = datetime.now()
+
         if existing_stock:
             # Update existing stock
             existing_stock.quantity = quantity
-            existing_stock.updated_at = datetime.now()
+            existing_stock.updated_at = current_time
             db.commit()
             db.refresh(existing_stock)
             stock_id = existing_stock.id
@@ -285,7 +334,7 @@ def create_stock(stock_data: Dict[str, Any], db: Session = Depends(get_db)):
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 quantity=quantity,
-                updated_at=datetime.now()
+                updated_at=current_time
             )
             db.add(new_stock)
             db.commit()
@@ -310,8 +359,8 @@ def create_stock(stock_data: Dict[str, Any], db: Session = Depends(get_db)):
             "minimum_quantity": int(stock_data.get("minimum_quantity", 30)),
             "reorder_level": int(stock_data.get("reorder_level", 50)),
             "quantity_reserved": 0,
-            "last_count_date": datetime.now().isoformat(),
-            "last_counted_by": CURRENT_USER,
+            "last_count_date": current_time.isoformat(),
+            "last_counted_by": username,
             "status": status
         }
 
@@ -323,9 +372,20 @@ def create_stock(stock_data: Dict[str, Any], db: Session = Depends(get_db)):
 
 
 @router.post("/stock-movements", response_model=Dict[str, Any])
-def create_stock_movement(movement_data: Dict[str, Any], db: Session = Depends(get_db)):
+def create_stock_movement(request: Request, movement_data: Dict[str, Any], db: Session = Depends(get_db)):
     """Create a new stock movement"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+        user_id = getattr(current_user, 'id', 1)
+
         # Extract required data from the request
         product_id = int(movement_data.get("product_id"))
         warehouse_id = int(movement_data.get("warehouse_id"))
@@ -341,14 +401,16 @@ def create_stock_movement(movement_data: Dict[str, Any], db: Session = Depends(g
         if not product or not warehouse:
             raise HTTPException(status_code=404, detail="Product or warehouse not found")
 
+        current_time = datetime.now()
+
         # Create new stock movement
         new_movement = models.StockMovement(
             product_id=product_id,
             warehouse_id=warehouse_id,
             quantity=quantity,
             movement_type=movement_type,
-            created_at=datetime.now(),
-            created_by_id=1,  # Default user ID
+            created_at=current_time,
+            created_by_id=user_id,
             note=notes
         )
 
@@ -376,7 +438,7 @@ def create_stock_movement(movement_data: Dict[str, Any], db: Session = Depends(g
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 quantity=max(0, quantity),
-                updated_at=datetime.now()
+                updated_at=current_time
             )
             db.add(stock)
 
@@ -407,7 +469,7 @@ def create_stock_movement(movement_data: Dict[str, Any], db: Session = Depends(g
             "movement_type": movement_type,
             "reference_id": movement_data.get("reference_id"),
             "reference_type": movement_data.get("reference_type"),
-            "performed_by": CURRENT_USER,
+            "performed_by": username,
             "movement_date": new_movement.created_at.isoformat(),
             "notes": notes
         }
@@ -420,21 +482,32 @@ def create_stock_movement(movement_data: Dict[str, Any], db: Session = Depends(g
 
 
 @router.post("/shipments", response_model=Dict[str, Any])
-def create_shipment(shipment_data: Dict[str, Any], db: Session = Depends(get_db)):
+def create_shipment(request: Request, shipment_data: Dict[str, Any], db: Session = Depends(get_db)):
     """Create a new shipment"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+
         # Extract base shipment data
         supplier = shipment_data.get("supplier", "Default Supplier")
         status = reverse_convert_shipment_status(shipment_data.get("status", "planned"))
         shipping_address = shipment_data.get("shipping_address", "")
         reference_number = shipment_data.get("reference_number", "")
+        current_time = datetime.now()
 
         # Create a mock order for the shipment
         new_order = models.Order(
             client_name=supplier,
             total_price=0,
             status="pending",
-            created_at=datetime.now(),
+            created_at=current_time,
             delivery_address=shipping_address
         )
         db.add(new_order)
@@ -501,14 +574,14 @@ def create_shipment(shipment_data: Dict[str, Any], db: Session = Depends(get_db)
         result = {
             "id": f"SH-{new_shipment.id}",
             "supplier": supplier,
-            "shipment_date": datetime.now().isoformat(),
+            "shipment_date": current_time.isoformat(),
             "expected_arrival_date": new_shipment.estimated_delivery.isoformat() if new_shipment.estimated_delivery else None,
             "actual_arrival_date": None,
             "status": shipment_data.get("status", "planned"),
             "reference_number": reference_number,
-            "created_by": CURRENT_USER,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_by": username,
+            "created_at": current_time.isoformat(),
+            "updated_at": current_time.isoformat(),
             "notes": shipment_data.get("notes", ""),
             "items": formatted_items
         }
@@ -562,7 +635,7 @@ def update_product(product_id: str, product_data: Dict[str, Any], db: Session = 
             "unit": "кг",
             "price": product.price,
             "is_active": True,
-            "created_at": product.created_at.isoformat() if product.created_at else CURRENT_DATETIME,
+            "created_at": product.created_at.isoformat() if product.created_at else datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "supplier": product_data.get("supplier", "Default Supplier"),
             "image_url": f"/images/products/SKU-{product.id:04d}.jpg",
@@ -578,9 +651,19 @@ def update_product(product_id: str, product_data: Dict[str, Any], db: Session = 
 
 
 @router.patch("/stocks/{stock_id}", response_model=Dict[str, Any])
-def patch_stock(stock_id: str, stock_data: Dict[str, Any], db: Session = Depends(get_db)):
+def patch_stock(stock_id: str, stock_data: Dict[str, Any], request: Request, db: Session = Depends(get_db)):
     """Partially update a stock entry"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+
         # Convert string ID to integer
         stock_id_int = int(stock_id)
 
@@ -593,7 +676,8 @@ def patch_stock(stock_id: str, stock_data: Dict[str, Any], db: Session = Depends
         if "quantity" in stock_data:
             stock.quantity = int(stock_data["quantity"])
 
-        stock.updated_at = datetime.now()
+        current_time = datetime.now()
+        stock.updated_at = current_time
         db.commit()
         db.refresh(stock)
 
@@ -621,7 +705,7 @@ def patch_stock(stock_id: str, stock_data: Dict[str, Any], db: Session = Depends
             "reorder_level": stock_data.get("reorder_level", 50),
             "quantity_reserved": 0,
             "last_count_date": stock.updated_at.isoformat(),
-            "last_counted_by": stock_data.get("last_counted_by", CURRENT_USER),
+            "last_counted_by": stock_data.get("last_counted_by", username),
             "status": status
         }
 
@@ -633,9 +717,19 @@ def patch_stock(stock_id: str, stock_data: Dict[str, Any], db: Session = Depends
 
 
 @router.patch("/shipments/{shipment_id}", response_model=Dict[str, Any])
-def patch_shipment(shipment_id: str, shipment_data: Dict[str, Any], db: Session = Depends(get_db)):
+def patch_shipment(shipment_id: str, shipment_data: Dict[str, Any], request: Request, db: Session = Depends(get_db)):
     """Partially update a shipment"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+
         # Extract numeric ID from shipment_id (format: "SH-12345")
         if shipment_id.startswith("SH-"):
             shipment_id = shipment_id[3:]
@@ -656,6 +750,8 @@ def patch_shipment(shipment_id: str, shipment_data: Dict[str, Any], db: Session 
 
         db.commit()
         db.refresh(shipment)
+
+        current_time = datetime.now()
 
         # Format response
         # Get shipment items
@@ -679,14 +775,14 @@ def patch_shipment(shipment_id: str, shipment_data: Dict[str, Any], db: Session 
         result = {
             "id": f"SH-{shipment.id}",
             "supplier": shipment.order.client_name if shipment.order else "Default Supplier",
-            "shipment_date": shipment.created_at.isoformat() if shipment.created_at else CURRENT_DATETIME,
+            "shipment_date": shipment.created_at.isoformat() if shipment.created_at else datetime.now().isoformat(),
             "expected_arrival_date": shipment.estimated_delivery.isoformat() if shipment.estimated_delivery else None,
             "actual_arrival_date": shipment.estimated_delivery.isoformat() if shipment.status == "delivered" and shipment.estimated_delivery else None,
             "status": convert_shipment_status(shipment.status),
             "reference_number": f"PO-2025-{shipment.id:03d}",
-            "created_by": CURRENT_USER,
-            "created_at": shipment.created_at.isoformat() if shipment.created_at else CURRENT_DATETIME,
-            "updated_at": datetime.now().isoformat(),
+            "created_by": username,
+            "created_at": shipment.created_at.isoformat() if shipment.created_at else datetime.now().isoformat(),
+            "updated_at": current_time.isoformat(),
             "notes": "",
             "items": items
         }
@@ -699,9 +795,20 @@ def patch_shipment(shipment_id: str, shipment_data: Dict[str, Any], db: Session 
 
 
 @router.patch("/shipment-items/{item_id}", response_model=Dict[str, Any])
-def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = Depends(get_db)):
+def patch_shipment_item(item_id: str, item_data: Dict[str, Any], request: Request, db: Session = Depends(get_db)):
     """Partially update a shipment item"""
     try:
+        # Попытка получения имени пользователя из запроса
+        current_user = None
+        try:
+            current_user = request.state.user
+        except:
+            current_user = None
+
+        # Имя пользователя по умолчанию, если не удалось получить из request
+        username = getattr(current_user, 'username', 'katarymba')
+        user_id = getattr(current_user, 'id', 1)
+
         # Extract numeric ID from item_id (format: "SI-12345")
         if item_id.startswith("SI-"):
             item_id = item_id[3:]
@@ -716,6 +823,8 @@ def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = D
         # Update quantity received if specified
         if "quantity_received" in item_data:
             order_item.quantity = int(item_data["quantity_received"])
+
+        current_time = datetime.now()
 
         # If item is received, update the product's stock
         if "is_received" in item_data and item_data["is_received"]:
@@ -736,7 +845,7 @@ def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = D
                     product_id=order_item.product_id,
                     warehouse_id=warehouse_id,
                     quantity=order_item.quantity,
-                    updated_at=datetime.now()
+                    updated_at=current_time
                 )
                 db.add(stock)
 
@@ -746,8 +855,8 @@ def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = D
                 warehouse_id=warehouse_id,
                 quantity=order_item.quantity,
                 movement_type="receipt",
-                created_at=datetime.now(),
-                created_by_id=1,  # Default user ID
+                created_at=current_time,
+                created_by_id=user_id,
                 note=f"Receipt from shipment order #{order_item.order_id}"
             )
             db.add(movement)
@@ -757,7 +866,7 @@ def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = D
                 for shipment in order_item.order.shipments:
                     if shipment.status != "delivered":
                         shipment.status = "delivered"
-                        shipment.estimated_delivery = datetime.now()
+                        shipment.estimated_delivery = current_time
 
         db.commit()
         db.refresh(order_item)
@@ -773,7 +882,7 @@ def patch_shipment_item(item_id: str, item_data: Dict[str, Any], db: Session = D
             "unit_price": order_item.price,
             "warehouse_id": item_data.get("warehouse_id", "1"),
             "is_received": item_data.get("is_received", False),
-            "received_date": datetime.now().isoformat() if item_data.get("is_received", False) else None,
+            "received_date": current_time.isoformat() if item_data.get("is_received", False) else None,
             "notes": item_data.get("notes", "")
         }
 

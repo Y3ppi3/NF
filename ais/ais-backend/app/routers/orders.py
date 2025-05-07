@@ -1,20 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pandas as pd
+import json
 from io import BytesIO
+import logging
 
 from ..database import get_db
-from ..models import Order, OrderItem, Payment, User
-from ..schemas import OrderWithPayment
+from ..models import Order, OrderItem, Payment, User, Product
+from ..schemas import OrderWithPayment, OrderUpdate
 from ..auth import get_current_user
 from ..utils.excel import create_excel
 
-router = APIRouter(prefix="/orders", tags=["orders"])
+# Настройка логирования
+logger = logging.getLogger("orders-service")
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+router = APIRouter(tags=["orders"])
 
 
-@router.get("/with-payments", response_model=List[OrderWithPayment])
+@router.get("", response_model=List[OrderWithPayment])
 def get_orders_with_payments(
         db: Session = Depends(get_db),
         current_user=Depends(get_current_user),
@@ -69,12 +79,26 @@ def get_orders_with_payments(
         order_dict['email'] = row.email
         order_dict['phone'] = row.phone
 
+        # Обработка order_items и добавление имен продуктов
+        if order_dict.get('order_items'):
+            try:
+                order_items = json.loads(order_dict['order_items'])
+                for item in order_items:
+                    product_id = item.get('product_id')
+                    if product_id:
+                        product = db.query(Product).filter(Product.id == product_id).first()
+                        if product:
+                            item['product_name'] = product.name
+                order_dict['order_items'] = order_items
+            except (json.JSONDecodeError, TypeError):
+                order_dict['order_items'] = []
+
         orders_with_payments.append(order_dict)
 
     return orders_with_payments
 
 
-@router.get("/{order_id}/with-payment", response_model=OrderWithPayment)
+@router.get("/{order_id}", response_model=OrderWithPayment)
 def get_order_with_payment(
         order_id: int,
         db: Session = Depends(get_db),
@@ -100,130 +124,117 @@ def get_order_with_payment(
         User,
         Order.user_id == User.id,
         isouter=True
-    ).filter(
-        Order.id == order_id
-    ).first()
-
+    ).filter(Order.id == order_id).first()
+    
     if not result:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-
+        raise HTTPException(status_code=404, detail=f"Заказ #{order_id} не найден")
+    
     order_dict = result[0].__dict__
     order_dict.pop('_sa_instance_state', None)
-
+    
     # Добавление информации о платеже
     order_dict['payment_method'] = result.payment_method
     order_dict['payment_status'] = result.payment_status
     order_dict['transaction_id'] = result.transaction_id
     order_dict['payment_created_at'] = result.payment_created_at
-
-    # Добавление информации о пользователе, если клиента нет в заказе
+    
+    # Добавление информации о пользователе
     if not order_dict.get('client_name') and result.full_name:
         order_dict['client_name'] = result.full_name
-
+    
     order_dict['email'] = result.email
     order_dict['phone'] = result.phone
-
+    
+    # Обработка order_items и добавление имен продуктов
+    if order_dict.get('order_items'):
+        try:
+            order_items = json.loads(order_dict['order_items'])
+            for item in order_items:
+                product_id = item.get('product_id')
+                if product_id:
+                    product = db.query(Product).filter(Product.id == product_id).first()
+                    if product:
+                        item['product_name'] = product.name
+            order_dict['order_items'] = order_items
+        except (json.JSONDecodeError, TypeError):
+            order_dict['order_items'] = []
+    
     return order_dict
 
 
-@router.get("/export")
-def export_orders(
-        background_tasks: BackgroundTasks,
-        format: str = Query("excel", description="Формат экспорта: excel или csv"),
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        status: Optional[str] = None,
+@router.patch("/{order_id}", response_model=OrderWithPayment)
+def update_order_partial(
+        order_id: int,
+        order_data: OrderUpdate,
         db: Session = Depends(get_db),
         current_user=Depends(get_current_user)
 ):
     """
-    Экспорт заказов в Excel или CSV
+    Частичное обновление заказа (PATCH)
     """
-    # Построение базового запроса
-    query = db.query(
-        Order.id,
-        Order.user_id,
-        Order.status,
-        Order.total_price,
-        Order.created_at,
-        Order.status,
-        Payment.payment_method,
-        Payment.payment_status,
-        Payment.transaction_id,
-        Payment.created_at.label("payment_created_at"),
-        User.email,
-        User.phone
-    ).join(
-        Payment,
-        Order.id == Payment.order_id,
-        isouter=True
-    ).join(
-        User,
-        Order.user_id == User.id,
-        isouter=True
-    )
+    db_order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not db_order:
+        raise HTTPException(status_code=404, detail=f"Заказ #{order_id} не найден")
+    
+    # Обновляем только указанные поля
+    order_data_dict = order_data.dict(exclude_unset=True)
+    
+    # Логирование изменений с указанием пользователя
+    username = getattr(current_user, 'username', 'system')
+    logger.info(f"Пользователь {username} обновляет заказ #{order_id}: {order_data_dict}")
+    
+    for key, value in order_data_dict.items():
+        if hasattr(db_order, key):
+            setattr(db_order, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(db_order)
+        logger.info(f"Заказ #{order_id} успешно обновлен пользователем {username}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Ошибка при обновлении заказа #{order_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {str(e)}")
+    
+    # Получаем обновленные данные заказа с платежной информацией
+    return get_order_with_payment(order_id, db, current_user)
 
-    # Применение фильтров
-    if start_date:
-        query = query.filter(Order.created_at >= start_date)
-    if end_date:
-        query = query.filter(Order.created_at <= end_date)
-    if status:
-        query = query.filter(Order.status == status)
 
-    # Получение результатов
-    result = query.all()
-
-    # Создание DataFrame
-    df = pd.DataFrame(result, columns=[
-        'ID заказа', 'ID пользователя', 'Клиент', 'Сумма', 'Дата создания', 'Статус',
-        'Способ оплаты', 'Статус оплаты', 'ID транзакции',
-        'Дата оплаты', 'Email', 'Телефон'
-    ])
-
-    # Форматирование данных
-    df['Дата создания'] = df['Дата создания'].dt.strftime('%d.%m.%Y %H:%M')
-    df['Дата оплаты'] = df['Дата оплаты'].dt.strftime('%d.%m.%Y %H:%M')
-
-    # Замена статусов на русскоязычные
-    status_map = {
-        'pending': 'Ожидает обработки',
-        'processing': 'В обработке',
-        'shipped': 'Отправлен',
-        'delivered': 'Доставлен',
-        'cancelled': 'Отменен',
-        'новый': 'Новый'
-    }
-    df['Статус'] = df['Статус'].map(status_map)
-
-    payment_status_map = {
-        'pending': 'Ожидает оплаты',
-        'processing': 'Обрабатывается',
-        'completed': 'Оплачен',
-        'failed': 'Ошибка оплаты'
-    }
-    df['Статус оплаты'] = df['Статус оплаты'].map(payment_status_map)
-
-    # Создание файла нужного формата
-    if format.lower() == "excel":
-        output = BytesIO()
-        df.to_excel(output, index=False, sheet_name='Заказы')
-        output.seek(0)
-        filename = f"orders_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-
-        return create_excel(
-            df,
-            filename=filename,
-            sheet_name="Заказы"
-        )
-    else:
-        # По умолчанию CSV
-        output = BytesIO()
-        df.to_csv(output, index=False, encoding='utf-8-sig')
-        output.seek(0)
-        filename = f"orders_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
-        return {
-            "file_url": f"/downloads/{filename}",
-            "message": "Экспорт успешно выполнен"
-        }
+@router.put("/{order_id}", response_model=OrderWithPayment)
+def update_order_full(
+        order_id: int,
+        order_data: OrderUpdate,
+        db: Session = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    """
+    Полное обновление заказа (PUT)
+    """
+    db_order = db.query(Order).filter(Order.id == order_id).first()
+    
+    if not db_order:
+        raise HTTPException(status_code=404, detail=f"Заказ #{order_id} не найден")
+    
+    # Обновляем все поля заказа
+    order_data_dict = order_data.dict(exclude_unset=False)
+    
+    # Логирование изменений с указанием пользователя
+    username = getattr(current_user, 'username', 'system')
+    logger.info(f"Пользователь {username} полностью обновляет заказ #{order_id}")
+    
+    for key, value in order_data_dict.items():
+        if hasattr(db_order, key):
+            setattr(db_order, key, value)
+    
+    try:
+        db.commit()
+        db.refresh(db_order)
+        logger.info(f"Заказ #{order_id} успешно обновлен пользователем {username}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Ошибка при обновлении заказа #{order_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {str(e)}")
+    
+    # Получаем обновленные данные заказа с платежной информацией
+    return get_order_with_payment(order_id, db, current_user)
