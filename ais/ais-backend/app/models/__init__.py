@@ -1,5 +1,5 @@
 # Экспортируем только Base из base.py
-#from app.models.base import Base
+from app.models.base import Base
 
 # Импортируем все классы моделей
 from app.models.user import User
