@@ -1,7 +1,9 @@
+# app/schemas/warehouse.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from app.schemas.enums import WarehouseType
+
 
 class WarehouseBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)

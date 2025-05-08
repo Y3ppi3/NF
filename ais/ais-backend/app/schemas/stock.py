@@ -1,6 +1,8 @@
+# app/schemas/stock.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from app.schemas.enums import StockStatus
+
 
 class StockItemBase(BaseModel):
     product_id: str

@@ -1,3 +1,4 @@
+# app/models/stock.py
 from sqlalchemy import (
     Column,
     Integer,
@@ -22,11 +23,13 @@ from app.database import Base
 class Stock(Base):
     __tablename__ = "stocks"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True,
+                server_default="nextval('stocks_id_seq'::regclass)")
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
     quantity = Column(Integer, nullable=False, default=0)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, server_default="CURRENT_TIMESTAMP",
+                       onupdate=datetime.utcnow)
 
     # Связи
     product = relationship("Product", back_populates="stocks")
