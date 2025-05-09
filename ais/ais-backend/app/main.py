@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.database import engine, Base, get_db, SessionLocal
 from app.routers import (
-    users, administrators, products,
+    users, administrators, product,
     category, orders, payments,
     shipments, auth, integration,
     warehouse, delivery, supply, stock
@@ -84,12 +84,14 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(administrators.router, prefix="/administrators", tags=["Administrators"])
 
-app.include_router(products.router, prefix="/api/products", tags=["Products"])
+app.include_router(product.router, prefix="/api/products", tags=["Products"])
 
 app.include_router(category.router, prefix="/api", tags=["Categories"])
 app.include_router(category.router, tags=["Categories"])
 
-app.include_router(orders.router, prefix="/api", tags=["Orders"])
+app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
+app.include_router(orders.router, prefix="/orders", tags=["Orders"])
+
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 
 app.include_router(warehouse.router, prefix="/api", tags=["warehouse"])

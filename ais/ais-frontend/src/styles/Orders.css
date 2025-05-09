@@ -1,99 +1,497 @@
-/* Стили для страницы заказов */
+/* 
+ * Orders Page Styles
+ * Строгие и лаконичные стили для страницы заказов на основе корпоративной палитры
+ */
 
-.orders-page {
-    padding: 20px;
-  }
-  
-  .status-pending {
-    color: #fa8c16;
-    background-color: #fff7e6;
-    border-color: #ffd591;
-  }
-  
-  .status-processing {
-    color: #1890ff;
-    background-color: #e6f7ff;
-    border-color: #91d5ff;
-  }
-  
-  .status-shipped {
-    color: #52c41a;
-    background-color: #f6ffed;
-    border-color: #b7eb8f;
-  }
-  
-  .status-delivered {
-    color: #52c41a;
-    background-color: #f6ffed;
-    border-color: #b7eb8f;
-  }
-  
-  .status-cancelled {
-    color: #f5222d;
-    background-color: #fff1f0;
-    border-color: #ffa39e;
-  }
-  
-  .order-details-card {
-    margin-bottom: 16px;
-    border-radius: 8px;
-  }
-  
-  .order-details-card .ant-card-head {
-    background-color: #fafafa;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-  }
-  
-  .order-item-row {
-    transition: all 0.3s;
-  }
-  
-  .order-item-row:hover {
-    background-color: #f5f5f5;
-  }
-  
-  /* Анимация для загрузки */
-  .loading-spinner {
-    animation: spin 1.2s infinite linear;
-  }
-  
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-  
-  /* Стили для фильтров */
-  .filters-container {
-    margin-bottom: 20px;
-  }
-  
-  /* Стиль для кнопок действий */
-  .action-buttons .ant-btn {
-    margin-right: 8px;
-  }
-  
-  /* Стили для мобильной версии */
-  @media (max-width: 768px) {
-    .filters-container {
-      flex-direction: column;
-    }
-    
-    .filters-container > * {
-      margin-bottom: 10px;
-      width: 100%;
-    }
-    
-    .page-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-    
-    .page-header .ant-btn-group {
-      margin-top: 10px;
-    }
-  }
+ @import './variables.css';
+
+ /* Основные стили страницы */
+ .orders-page {
+   background-color: var(--snow-white);
+   padding: var(--spacing-lg);
+   width: 100%;
+   max-width: 1440px;
+   margin: 0 auto;
+ }
+ 
+ /* Заголовок страницы */
+ .page-header {
+   margin-bottom: var(--spacing-lg);
+ }
+ 
+ .page-header h2 {
+   color: var(--coal-gray);
+   font-size: var(--font-size-2xl);
+   font-weight: 600;
+   margin-bottom: var(--spacing-xs);
+ }
+ 
+ /* Строка со статистикой */
+ .stats-row {
+   display: grid;
+   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+   gap: var(--spacing-md);
+   margin-bottom: var(--spacing-lg);
+ }
+ 
+ .stat-card {
+   background-color: white;
+   border-radius: var(--border-radius);
+   box-shadow: 0 2px 8px var(--shadow-color);
+   overflow: hidden;
+   transition: transform 0.2s ease;
+   border-top: 3px solid transparent;
+ }
+ 
+ .stat-card:hover {
+   transform: translateY(-2px);
+ }
+ 
+ .stat-card-all {
+   border-top-color: var(--northern-blue);
+ }
+ 
+ .stat-card-pending {
+   border-top-color: #FF8F00; /* Оранжевый для ожидающих */
+ }
+ 
+ .stat-card-processing {
+   border-top-color: var(--steel-blue);
+ }
+ 
+ .stat-card-shipped {
+   border-top-color: #2196F3; /* Синий для отправленных */
+ }
+ 
+ .stat-card-delivered {
+   border-top-color: var(--aquamarine);
+ }
+ 
+ .stat-card-payment {
+   border-top-color: var(--cold-red);
+ }
+ 
+ .statistic-container {
+   padding: var(--spacing-md);
+ }
+ 
+ .statistic-title {
+   font-size: var(--font-size-sm);
+   color: var(--steel-blue);
+   margin-bottom: var(--spacing-xs);
+ }
+ 
+ .statistic-value {
+   font-size: var(--font-size-xl);
+   color: var(--coal-gray);
+   font-weight: 600;
+   display: flex;
+   align-items: center;
+ }
+ 
+ .statistic-prefix {
+   margin-right: var(--spacing-sm);
+   color: var(--northern-blue);
+   display: flex;
+   align-items: center;
+ }
+ 
+ /* Карточка с фильтрами */
+ .filters-card {
+   background-color: white;
+   border-radius: var(--border-radius);
+   box-shadow: 0 2px 8px var(--shadow-color);
+   margin-bottom: var(--spacing-lg);
+ }
+ 
+ .filters-card .ant-card-body {
+   padding: var(--spacing-md);
+ }
+ 
+ .button-group {
+   display: flex;
+   gap: var(--spacing-sm);
+   justify-content: flex-end;
+ }
+ 
+ /* Карточка с таблицей */
+ .orders-table-card {
+   background-color: white;
+   border-radius: var(--border-radius);
+   box-shadow: 0 2px 8px var(--shadow-color);
+   margin-bottom: var(--spacing-lg);
+ }
+ 
+ .orders-table-card .ant-card-body {
+   padding: var(--spacing-md);
+ }
+ 
+ /* Стилизация таблицы заказов */
+ .orders-table-card .ant-table-thead > tr > th {
+   background-color: var(--ice-gray);
+   color: var(--steel-blue);
+   font-weight: 600;
+   font-size: var(--font-size-xs);
+   text-transform: uppercase;
+   letter-spacing: 0.05em;
+ }
+ 
+ .orders-table-card .ant-table-tbody > tr > td {
+   padding: 12px 16px;
+   font-size: var(--font-size-sm);
+ }
+ 
+ .orders-table-card .ant-table-tbody > tr:hover > td {
+   background-color: var(--light-azure);
+ }
+ 
+ .orders-table-card .ant-pagination {
+   margin: 16px 0;
+ }
+ 
+ /* Стилизация ID заказа */
+ .order-id {
+   font-weight: 600;
+   color: var(--northern-blue);
+ }
+ 
+ /* Стили для тегов статусов */
+ .ant-tag {
+   border-radius: 12px;
+   padding: 2px 8px;
+   font-size: var(--font-size-xs);
+   border: none;
+   font-weight: 500;
+ }
+ 
+ /* Настраиваем цвета тегов с соответствии с палитрой */
+ .ant-tag-orange {
+   background-color: rgba(255, 143, 0, 0.15);
+   color: #FF8F00;
+ }
+ 
+ .ant-tag-purple {
+   background-color: rgba(74, 106, 125, 0.15);
+   color: var(--steel-blue);
+ }
+ 
+ .ant-tag-blue {
+   background-color: rgba(0, 91, 143, 0.15);
+   color: var(--northern-blue);
+ }
+ 
+ .ant-tag-green {
+   background-color: rgba(0, 179, 164, 0.15);
+   color: var(--aquamarine);
+ }
+ 
+ .ant-tag-red {
+   background-color: rgba(214, 69, 69, 0.15);
+   color: var(--cold-red);
+ }
+ 
+ /* Стили для информации о транзакции */
+ .transaction-id {
+   font-size: var(--font-size-xs);
+   color: var(--steel-blue);
+   word-break: break-all;
+ }
+ 
+ /* Стили для номера отслеживания */
+ .tracking-number {
+   font-size: var(--font-size-xs);
+   color: var(--northern-blue);
+   font-family: monospace;
+ }
+ 
+ /* Стили для кнопок действий */
+ .action-buttons {
+   display: flex;
+   justify-content: flex-end;
+ }
+ 
+ .action-button {
+   padding: 0;
+   width: 32px;
+   height: 32px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   color: var(--steel-blue);
+   transition: all 0.2s ease;
+ }
+ 
+ .action-button:hover {
+   color: var(--northern-blue);
+   background-color: var(--light-azure);
+ }
+ 
+ /* Стили для Drawer (боковой панели) */
+ .ant-drawer-header {
+   background-color: var(--ice-gray);
+   border-bottom: 1px solid var(--fog-gray);
+ }
+ 
+ .ant-drawer-title {
+   color: var(--coal-gray);
+   font-weight: 600;
+ }
+ 
+ .ant-drawer-content {
+   background-color: white;
+ }
+ 
+ .ant-drawer-footer {
+   border-top: 1px solid var(--fog-gray);
+   padding: var(--spacing-md);
+   display: flex;
+   justify-content: flex-end;
+ }
+ 
+ /* Стили для разделов деталей заказа */
+ .order-details {
+   padding: var(--spacing-sm) 0;
+ }
+ 
+ .detail-section {
+   margin-bottom: var(--spacing-lg);
+   padding-bottom: var(--spacing-md);
+   border-bottom: 1px solid var(--fog-gray);
+ }
+ 
+ .detail-section:last-child {
+   border-bottom: none;
+   margin-bottom: 0;
+ }
+ 
+ .section-header {
+   margin-bottom: var(--spacing-md);
+ }
+ 
+ .section-header h3 {
+   color: var(--coal-gray);
+   font-size: var(--font-size-lg);
+   font-weight: 600;
+   margin: 0;
+ }
+ 
+ /* Стили для блока примечаний */
+ .notes-box {
+   background-color: var(--snow-white);
+   border: 1px solid var(--fog-gray);
+   border-radius: var(--border-radius);
+   padding: var(--spacing-md);
+   min-height: 60px;
+   margin-top: var(--spacing-xs);
+ }
+ 
+ /* Стили для таблицы товаров в деталях заказа */
+ .order-details .ant-table-small {
+   margin: var(--spacing-sm) 0;
+ }
+ 
+ .order-details .ant-table-small .ant-table-thead > tr > th {
+   background-color: var(--ice-gray);
+   color: var(--steel-blue);
+   font-weight: 600;
+   font-size: var(--font-size-xs);
+ }
+ 
+ .order-details .ant-table-small .ant-table-tbody > tr > td {
+   font-size: var(--font-size-sm);
+ }
+ 
+ .order-details .ant-table-small .ant-table-tbody > tr:hover > td {
+   background-color: var(--light-azure);
+ }
+ 
+ .order-details .ant-table-summary {
+   background-color: var(--snow-white);
+ }
+ 
+ /* Стили элементов формы */
+ .ant-form-item-label > label {
+   color: var(--coal-gray);
+   font-weight: 500;
+ }
+ 
+ .ant-input, 
+ .ant-select-selector,
+ .ant-picker {
+   border-color: var(--fog-gray);
+   border-radius: var(--border-radius);
+ }
+ 
+ .ant-input:focus, 
+ .ant-input-focused,
+ .ant-select-focused .ant-select-selector,
+ .ant-picker-focused {
+   border-color: var(--northern-blue);
+   box-shadow: 0 0 0 2px rgba(0, 91, 143, 0.1);
+ }
+ 
+ .ant-btn {
+   border-radius: var(--border-radius);
+   font-weight: 500;
+   height: 36px;
+ }
+ 
+ .ant-btn-primary {
+   background-color: var(--northern-blue);
+   border-color: var(--northern-blue);
+ }
+ 
+ .ant-btn-primary:hover {
+   background-color: #004a75; /* Темнее вариант северного синего */
+   border-color: #004a75;
+ }
+ 
+ /* Настройка Select (выпадающих списков) */
+ .ant-select-dropdown {
+   border-radius: var(--border-radius);
+   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+ }
+ 
+ .ant-select-item-option-selected {
+   background-color: var(--light-azure);
+   color: var(--northern-blue);
+   font-weight: 500;
+ }
+ 
+ .ant-select-item-option-active {
+   background-color: rgba(185, 221, 242, 0.5);
+ }
+ 
+ /* Настройка DatePicker */
+ .ant-picker-dropdown {
+   border-radius: var(--border-radius);
+   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+ }
+ 
+ .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
+   background-color: var(--northern-blue);
+ }
+ 
+ .ant-picker-cell-in-view.ant-picker-cell-today .ant-picker-cell-inner::before {
+   border-color: var(--northern-blue);
+ }
+ 
+ /* Стили уведомлений */
+ .ant-notification-notice {
+   border-radius: var(--border-radius);
+   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+ }
+ 
+ .ant-notification-notice-message {
+   color: var(--coal-gray);
+   font-weight: 600;
+ }
+ 
+ .ant-notification-notice-description {
+   color: var(--steel-blue);
+ }
+ 
+ /* Стили для модальных окон подтверждения */
+ .ant-popconfirm {
+   max-width: 300px;
+ }
+ 
+ .ant-popconfirm-message-title {
+   color: var(--coal-gray);
+   font-weight: 500;
+ }
+ 
+ .ant-popconfirm-description {
+   color: var(--steel-blue);
+ }
+ 
+ .ant-popconfirm-buttons .ant-btn-primary {
+   background-color: var(--northern-blue);
+   border-color: var(--northern-blue);
+ }
+ 
+ .ant-popconfirm-buttons .ant-btn-primary:hover {
+   background-color: #004a75;
+   border-color: #004a75;
+ }
+ 
+ /* Адаптивные стили */
+ @media (max-width: 992px) {
+   .orders-page {
+     padding: var(--spacing-md);
+   }
+   
+   .stats-row {
+     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+     gap: var(--spacing-sm);
+   }
+   
+   .statistic-value {
+     font-size: var(--font-size-lg);
+   }
+ }
+ 
+ @media (max-width: 576px) {
+   .orders-page {
+     padding: var(--spacing-sm);
+   }
+   
+   .stats-row {
+     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+     gap: var(--spacing-xs);
+   }
+   
+   .button-group {
+     flex-direction: column;
+     width: 100%;
+   }
+   
+   .button-group .ant-btn {
+     width: 100%;
+   }
+   
+   .action-buttons {
+     flex-wrap: wrap;
+     gap: var(--spacing-xs);
+   }
+   
+   .order-details .ant-row {
+     margin-bottom: var(--spacing-xs);
+   }
+   
+   .ant-drawer {
+     width: 100% !important;
+   }
+ }
+ 
+ /* Стили для печати */
+ @media print {
+   body {
+     background-color: white;
+   }
+   
+   .orders-page,
+   .page-header,
+   .filters-card,
+   .stats-row,
+   .action-buttons,
+   .ant-pagination,
+   .ant-table-thead > tr > th:last-child,
+   .ant-table-tbody > tr > td:last-child {
+     display: none;
+   }
+   
+   .orders-table-card {
+     box-shadow: none;
+     margin: 0;
+     padding: 0;
+   }
+   
+   .ant-table {
+     font-size: 12px;
+   }
+   
+   .ant-table-tbody > tr > td {
+     padding: 8px;
+   }
+ }

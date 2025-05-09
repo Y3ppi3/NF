@@ -19,6 +19,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid';
+import '../styles/Warehouse.css';
 
 // Интерфейсы для типов данных, основанные на структуре БД
 interface Product {
@@ -132,15 +133,22 @@ interface ProductFilter {
 }
 
 // URL для API
-const API_BASE_URL = 'http://localhost:8080/ais/warehouse';
+import { API_BASE_URL as BASE_URL } from '../services/api';
+const API_BASE_URL = `${BASE_URL}/api/warehouse`;
 
 // Текущая дата и время для системы
-const CURRENT_DATE = '2025-05-05 14:37:40';
-const CURRENT_USER = 'katarymba';
+const getCurrentDateTime = () => {
+  return new Date().toISOString().replace('T', ' ').substring(0, 19);
+};
+
+// Получаем текущего пользователя из localStorage или используем переданное значение
+const getCurrentUser = () => {
+  return localStorage.getItem('currentUser') || 'katarymba';
+};
 
 // API ключ и URL для Север-Рыба
-const SEVER_RYBA_API_URL = 'http://sever-ryba-api.local';
-const SEVER_RYBA_API_KEY = 'sr_api_key_2025';
+const SEVER_RYBA_API_URL = `http://localhost:8000`;
+const SEVER_RYBA_API_KEY = localStorage.getItem('severRybaApiKey') || 'sr_api_key_2025';
 
 const Warehouse: React.FC = () => {
   // Состояния для данных
@@ -201,7 +209,7 @@ const Warehouse: React.FC = () => {
     shipment_date: new Date().toISOString().split('T')[0],
     expected_arrival_date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // +1 день
     status: 'planned',
-    created_by: CURRENT_USER,
+    created_by: getCurrentUser(),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     items: []
@@ -656,7 +664,7 @@ const Warehouse: React.FC = () => {
         ...newProduct,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        created_by: CURRENT_USER
+        created_by: getCurrentUser()
       };
 
       // Отправляем данные в нашу БД
@@ -672,7 +680,7 @@ const Warehouse: React.FC = () => {
           price: productData.price,
           unit: productData.unit,
           quantity: newStockItem.quantity || 0,
-          created_by: CURRENT_USER
+          created_by: getCurrentUser()
         }, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
@@ -683,7 +691,7 @@ const Warehouse: React.FC = () => {
       } catch (syncError) {
         console.error("Ошибка синхронизации с Север-Рыба:", syncError);
         // Показываем предупреждение, но не прерываем весь процесс
-        alert('Товар добавлен в АИС, но не удалось синхронизировать с Север-Рыба. Будет выполнена автоматическая синхронизация при следующем обновлении.');
+        alert('Товар добавлен в АИС, но не удалось синхронизировать с Север-Рыба. Будет выполнена автоматическая синхронизация позже.');
       }
 
       // Обновляем список товаров
@@ -699,7 +707,7 @@ const Warehouse: React.FC = () => {
           reorder_level: newStockItem.reorder_level,
           status: determineStockStatus(newStockItem.quantity as number, newStockItem.minimum_quantity as number),
           last_count_date: new Date().toISOString(),
-          last_counted_by: CURRENT_USER
+          last_counted_by: getCurrentUser()
         };
 
         const stockResponse = await axios.post(`${API_BASE_URL}/stocks`, stockItemData);
@@ -714,7 +722,7 @@ const Warehouse: React.FC = () => {
           quantity: newStockItem.quantity,
           previous_quantity: 0,
           movement_type: 'receipt',
-          performed_by: CURRENT_USER,
+          performed_by: getCurrentUser(),
           movement_date: new Date().toISOString(),
           notes: 'Первоначальное добавление товара в систему'
         };
@@ -785,7 +793,7 @@ const Warehouse: React.FC = () => {
       } catch (syncError) {
         console.error("Ошибка синхронизации поставки с Север-Рыба:", syncError);
         // Предупреждаем пользователя, но не прерываем процесс
-        alert('Поставка добавлена в АИС, но не удалось синхронизировать с Север-Рыба. Будет выполнена автоматическая синхронизация при следующем обновлении.');
+        alert('Поставка добавлена в АИС, но не удалось синхронизировать с Север-Рыба. Будет выполнена автоматическая синхронизация позже.');
       }
 
       setShipments([...shipments, createdShipment]);
@@ -796,7 +804,7 @@ const Warehouse: React.FC = () => {
         shipment_date: new Date().toISOString().split('T')[0],
         expected_arrival_date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // +1 день
         status: 'planned',
-        created_by: CURRENT_USER,
+        created_by: getCurrentUser(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         items: []
@@ -883,7 +891,7 @@ const Warehouse: React.FC = () => {
       await axios.patch(`${API_BASE_URL}/stocks/${stockItem.id}`, {
         quantity: newQuantity,
         last_count_date: new Date().toISOString(),
-        last_counted_by: CURRENT_USER,
+        last_counted_by: getCurrentUser(),
         status: determineStockStatus(newQuantity, stockItem.minimum_quantity)
       });
 
@@ -894,7 +902,7 @@ const Warehouse: React.FC = () => {
         quantity: difference,
         previous_quantity: previousQuantity,
         movement_type: 'adjustment',
-        performed_by: CURRENT_USER,
+        performed_by: getCurrentUser(),
         movement_date: new Date().toISOString(),
         notes: newInventoryCount.notes
       });
@@ -905,7 +913,7 @@ const Warehouse: React.FC = () => {
         try {
           await axios.put(`${SEVER_RYBA_API_URL}/products/${product.sku}/stock`, {
             quantity: newQuantity,
-            updated_by: CURRENT_USER
+            updated_by: getCurrentUser()
           }, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
@@ -914,7 +922,7 @@ const Warehouse: React.FC = () => {
           });
         } catch (syncError) {
           console.error("Ошибка синхронизации с Север-Рыба при пересчете:", syncError);
-          alert('Пересчет выполнен в АИС, но не удалось обновить данные в Север-Рыба. Будет выполнена автоматическая синхронизация при следующем обновлении.');
+          alert('Пересчет выполнен в АИС, но не удалось обновить данные в Север-Рыба. Будет выполнена автоматическая синхронизация позже.');
         }
       }
 
@@ -966,7 +974,7 @@ const Warehouse: React.FC = () => {
         await axios.put(`${SEVER_RYBA_API_URL}/shipments/${shipment.reference_number || shipment.id}`, {
           status: 'received',
           received_at: new Date().toISOString(),
-          updated_by: CURRENT_USER
+          updated_by: getCurrentUser()
         }, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
@@ -1010,7 +1018,7 @@ const Warehouse: React.FC = () => {
             movement_type: 'receipt',
             reference_id: shipmentId,
             reference_type: 'shipment',
-            performed_by: CURRENT_USER,
+            performed_by: getCurrentUser(),
             movement_date: new Date().toISOString(),
             notes: `Приемка товара из поставки #${shipmentId}`
           });
@@ -1034,7 +1042,7 @@ const Warehouse: React.FC = () => {
               reorder_level: reorderLevel,
               status: 'in-stock',
               last_count_date: new Date().toISOString(),
-              last_counted_by: CURRENT_USER
+              last_counted_by: getCurrentUser()
             };
 
             await axios.post(`${API_BASE_URL}/stocks`, newStockData);
@@ -1048,7 +1056,7 @@ const Warehouse: React.FC = () => {
               movement_type: 'receipt',
               reference_id: shipmentId,
               reference_type: 'shipment',
-              performed_by: CURRENT_USER,
+              performed_by: getCurrentUser(),
               movement_date: new Date().toISOString(),
               notes: `Приемка товара из поставки #${shipmentId}`
             });
@@ -1073,7 +1081,7 @@ const Warehouse: React.FC = () => {
             // Обновляем количество в Север-Рыба
             await axios.put(`${SEVER_RYBA_API_URL}/products/${product.sku}/stock`, {
               quantity: newQuantity,
-              updated_by: CURRENT_USER
+              updated_by: getCurrentUser()
             }, {
               headers: {
                 'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
@@ -2430,8 +2438,7 @@ const Warehouse: React.FC = () => {
 
                               // Если выбраны и товар, и склад - найдем текущее количество
                               if (newInventoryCount.product_id && warehouseId) {
-                                const stockItem = stockItems.find(item =>
-                                    item.product_id === newInventoryCount.product_id &&
+                                const stockItem = stockItems.find(item => item.product_id === newInventoryCount.product_id &&
                                     item.warehouse_id === warehouseId
                                 );
 
@@ -2706,7 +2713,7 @@ const Warehouse: React.FC = () => {
                                   <div className="col-span-2">
                                     <div className="text-sm text-blue-600 dark:text-blue-400">Статус синхронизации</div>
                                     <div className="text-base text-blue-700 dark:text-blue-300">
-                                      Синхронизировано {formatDateTime('2025-05-05T14:46:38')}
+                                      Синхронизировано {formatDateTime(getCurrentDateTime())}
                                     </div>
                                   </div>
                                 </div>
@@ -2834,8 +2841,8 @@ const Warehouse: React.FC = () => {
               <p>Система управления складскими запасами</p>
             </div>
             <div className="text-right">
-              <p>Последнее обновление: 2025-05-05 14:46:38</p>
-              <p>Пользователь: katarymba</p>
+              <p>Последнее обновление: {getCurrentDateTime()}</p>
+              <p>Пользователь: {getCurrentUser()}</p>
             </div>
           </div>
         </div>
