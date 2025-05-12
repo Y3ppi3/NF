@@ -20,7 +20,7 @@ import {
     ProductFilter
 } from './interfaces';
 
-interface InventoryManagementProps {
+interface StockManagementProps {
     isLoading: boolean;
     products: Product[];
     stockItems: StockItem[];
@@ -33,18 +33,18 @@ interface InventoryManagementProps {
     determineStockStatus: (quantity: number, minQuantity: number) => string;
 }
 
-const InventoryManagement: React.FC<InventoryManagementProps> = ({
-                                                                     isLoading,
-                                                                     products,
-                                                                     stockItems,
-                                                                     warehouses,
-                                                                     categories,
-                                                                     fetchData,
-                                                                     API_BASE_URL,
-                                                                     getCurrentDateTime,
-                                                                     getCurrentUser,
-                                                                     determineStockStatus
-                                                                 }) => {
+const StockManagement: React.FC<StockManagementProps> = ({
+                                                             isLoading,
+                                                             products,
+                                                             stockItems,
+                                                             warehouses,
+                                                             categories,
+                                                             fetchData,
+                                                             API_BASE_URL,
+                                                             getCurrentDateTime,
+                                                             getCurrentUser,
+                                                             determineStockStatus
+                                                         }) => {
     // State for filters and sorting
     const [filters, setFilters] = useState<ProductFilter>({
         search: '',
@@ -167,7 +167,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
             if (
                 filters.search &&
                 !product.name.toLowerCase().includes(filters.search.toLowerCase()) &&
-                !product.sku.toLowerCase().includes(filters.search.toLowerCase())
+                !product.sku?.toLowerCase().includes(filters.search.toLowerCase())
             ) {
                 return false;
             }
@@ -207,16 +207,16 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                         : productB.name.localeCompare(productA.name);
                 case 'sku':
                     return filters.sortDirection === 'asc'
-                        ? productA.sku.localeCompare(productB.sku)
-                        : productB.sku.localeCompare(productA.sku);
+                        ? (productA.sku || '').localeCompare(productB.sku || '')
+                        : (productB.sku || '').localeCompare(productA.sku || '');
                 case 'quantity':
                     return filters.sortDirection === 'asc'
                         ? a.quantity - b.quantity
                         : b.quantity - a.quantity;
                 case 'category':
                     return filters.sortDirection === 'asc'
-                        ? productA.category_name.localeCompare(productB.category_name)
-                        : productB.category_name.localeCompare(productA.category_name);
+                        ? (productA.category_name || '').localeCompare(productB.category_name || '')
+                        : (productB.category_name || '').localeCompare(productA.category_name || '');
                 case 'lastUpdated':
                     return filters.sortDirection === 'asc'
                         ? new Date(a.last_count_date || 0).getTime() - new Date(b.last_count_date || 0).getTime()
@@ -229,8 +229,8 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
 
     // Add product handler
     const handleAddProduct = async () => {
-        if (!newProduct.name || !newProduct.sku || !newProduct.category_id) {
-            alert('Пожалуйста, заполните обязательные поля: Наименование, Артикул, Категория');
+        if (!newProduct.name || !newProduct.category_id) {
+            alert('Пожалуйста, заполните обязательные поля: Наименование, Категория');
             return;
         }
 
@@ -247,9 +247,6 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
             const response = await axios.post(`${API_BASE_URL}/products`, productData);
             const createdProduct = response.data;
 
-            // Update product list
-            setProducts([...products, createdProduct]);
-
             // If warehouse and quantity are specified, create stock record
             if (newStockItem.warehouse_id && newStockItem.quantity) {
                 const stockItemData = {
@@ -264,9 +261,6 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                 };
 
                 const stockResponse = await axios.post(`${API_BASE_URL}/stocks`, stockItemData);
-                const stockData = stockResponse.data;
-
-                setStockItems([...stockItems, stockData]);
 
                 // Create stock movement record
                 const movementItemData = {
@@ -286,6 +280,9 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
             // Clear form and close modal
             resetNewProductForm();
             setShowAddProductModal(false);
+
+            // Refresh data
+            fetchData();
 
             // Notification
             alert('Товар успешно добавлен!');
@@ -381,7 +378,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
 
     return (
         <>
-            {/* Filters and search */}
+        {/* Filters and search */}
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     <div>
@@ -395,8 +392,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                                 value={filters.search}
                                 onChange={(e) => handleFilterChange('search', e.target.value)}
                                 placeholder="Поиск по названию или артикулу"
-                                className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                    bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
                             />
                             <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-2.5 text-gray-400" />
                         </div>
@@ -410,8 +406,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                             id="category"
                             value={filters.category_id}
                             onChange={(e) => handleFilterChange('category_id', e.target.value)}
-                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                  bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
                         >
                             <option value="">Все категории</option>
                             {categories.map(category => (
@@ -428,8 +423,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                             id="status"
                             value={filters.status}
                             onChange={(e) => handleFilterChange('status', e.target.value)}
-                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                  bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
                         >
                             <option value="all">Все статусы</option>
                             <option value="in-stock">В наличии</option>
@@ -447,8 +441,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                             id="warehouse"
                             value={filters.warehouse_id}
                             onChange={(e) => handleFilterChange('warehouse_id', e.target.value)}
-                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                  bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
                         >
                             <option value="">Все склады</option>
                             {warehouses.map(warehouse => (
@@ -498,299 +491,519 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                 </div>
             </div>
 
-            {/* Products table */}
-            {isLoading ? (
-                <div className="flex justify-center items-center py-20">
-                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                </div>
-            ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead className="bg-gray-50 dark:bg-gray-700">
+        {/* Products table */}
+        {isLoading ? (
+            <div className="flex justify-center items-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+        ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                <div
+                                    className="flex items-center cursor-pointer"
+                                    onClick={() => handleSortChange('name')}
+                                >
+                                    Наименование
+                                    {filters.sortBy === 'name' && (
+                                        filters.sortDirection === 'asc' ?
+                                            <ChevronUpIcon className="h-4 w-4 ml-1" /> :
+                                            <ChevronDownIcon className="h-4 w-4 ml-1" />
+                                    )}
+                                </div>
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                <div
+                                    className="flex items-center cursor-pointer"
+                                    onClick={() => handleSortChange('sku')}
+                                >
+                                    Артикул
+                                    {filters.sortBy === 'sku' && (
+                                        filters.sortDirection === 'asc' ?
+                                            <ChevronUpIcon className="h-4 w-4 ml-1" /> :
+                                            <ChevronDownIcon className="h-4 w-4 ml-1" />
+                                    )}
+                                </div>
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                <div
+                                    className="flex items-center cursor-pointer"
+                                    onClick={() => handleSortChange('category')}
+                                >
+                                    Категория
+                                    {filters.sortBy === 'category' && (
+                                        filters.sortDirection === 'asc' ?
+                                            <ChevronUpIcon className="h-4 w-4 ml-1" /> :
+                                            <ChevronDownIcon className="h-4 w-4 ml-1" />
+                                    )}
+                                </div>
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Склад
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                <div
+                                    className="flex items-center cursor-pointer"
+                                    onClick={() => handleSortChange('quantity')}
+                                >
+                                    Количество
+                                    {filters.sortBy === 'quantity' && (
+                                        filters.sortDirection === 'asc' ?
+                                            <ChevronUpIcon className="h-4 w-4 ml-1" /> :
+                                            <ChevronDownIcon className="h-4 w-4 ml-1" />
+                                    )}
+                                </div>
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Цена
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Стоимость
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Статус
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                <div
+                                    className="flex items-center cursor-pointer"
+                                    onClick={() => handleSortChange('lastUpdated')}
+                                >
+                                    Обновлено
+                                    {filters.sortBy === 'lastUpdated' && (
+                                        filters.sortDirection === 'asc' ?
+                                            <ChevronUpIcon className="h-4 w-4 ml-1" /> :
+                                            <ChevronDownIcon className="h-4 w-4 ml-1" />
+                                    )}
+                                </div>
+                            </th>
+                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                Действия
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {filteredStockItems.length === 0 ? (
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <div
-                                        className="flex items-center cursor-pointer"
-                                        onClick={() => handleSortChange('name')}
-                                    >
-                                        Наименование
-                                        {filters.sortBy === 'name' && (
-                                            filters.sortDirection === 'asc' ?
-                                                <ChevronUpIcon className="h-4 w-4 ml-1" /> :
-                                                <ChevronDownIcon className="h-4 w-4 ml-1" />
-                                        )}
-                                    </div>
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <div
-                                        className="flex items-center cursor-pointer"
-                                        onClick={() => handleSortChange('sku')}
-                                    >
-                                        Артикул
-                                        {filters.sortBy === 'sku' && (
-                                            filters.sortDirection === 'asc' ?
-                                                <ChevronUpIcon className="h-4 w-4 ml-1" /> :
-                                                <ChevronDownIcon className="h-4 w-4 ml-1" />
-                                        )}
-                                    </div>
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <div
-                                        className="flex items-center cursor-pointer"
-                                        onClick={() => handleSortChange('category')}
-                                    >
-                                        Категория
-                                        {filters.sortBy === 'category' && (
-                                            filters.sortDirection === 'asc' ?
-                                                <ChevronUpIcon className="h-4 w-4 ml-1" /> :
-                                                <ChevronDownIcon className="h-4 w-4 ml-1" />
-                                        )}
-                                    </div>
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    Склад
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <div
-                                        className="flex items-center cursor-pointer"
-                                        onClick={() => handleSortChange('quantity')}
-                                    >
-                                        Количество
-                                        {filters.sortBy === 'quantity' && (
-                                            filters.sortDirection === 'asc' ?
-                                                <ChevronUpIcon className="h-4 w-4 ml-1" /> :
-                                                <ChevronDownIcon className="h-4 w-4 ml-1" />
-                                        )}
-                                    </div>
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    Цена
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    Стоимость
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    Статус
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    <div
-                                        className="flex items-center cursor-pointer"
-                                        onClick={() => handleSortChange('lastUpdated')}
-                                    >
-                                        Обновлено
-                                        {filters.sortBy === 'lastUpdated' && (
-                                            filters.sortDirection === 'asc' ?
-                                                <ChevronUpIcon className="h-4 w-4 ml-1" /> :
-                                                <ChevronDownIcon className="h-4 w-4 ml-1" />
-                                        )}
-                                    </div>
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                                    Действия
-                                </th>
+                                <td colSpan={10} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                                    Товары не найдены. Измените параметры поиска или добавьте новые товары.
+                                </td>
                             </tr>
-                            </thead>
-                            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                            {filteredStockItems.length === 0 ? (
-                                <tr>
-                                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                                        Товары не найдены. Измените параметры поиска или добавьте новые товары.
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredStockItems.map((item) => {
-                                    // Find product to get its data
-                                    const product = products.find(p => p.id === item.product_id);
-                                    if (!product) return null;
+                        ) : (
+                            filteredStockItems.map((item) => {
+                                // Find product to get its data
+                                const product = products.find(p => p.id === item.product_id);
+                                if (!product) return null;
 
-                                    return (
-                                        <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                    {product.image_url ? (
-                                                        <img
-                                                            src={product.image_url}
-                                                            alt={product.name}
-                                                            className="h-10 w-10 rounded-md object-cover mr-3"
-                                                        />
-                                                    ) : (
-                                                        <div className="h-10 w-10 rounded-md bg-gray-200 dark:bg-gray-600 flex items-center justify-center mr-3">
-                                                            <DocumentTextIcon className="h-6 w-6 text-gray-400 dark:text-gray-500" />
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                                            {product.name}
-                                                            {product.sr_sync && (
-                                                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                                    Север-Рыба
-                                  </span>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                            {product.supplier ? `Поставщик: ${product.supplier}` : 'Поставщик не указан'}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">{product.sku}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">{product.category_name}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">{item.warehouse_name}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">
-                                                    {item.quantity} {product.unit}
-                                                    {item.quantity_reserved && item.quantity_reserved > 0 && (
-                                                        <span className="ml-1 text-xs text-yellow-600 dark:text-yellow-400">
-                                (зарез. {item.quantity_reserved})
-                              </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                    Мин.: {item.minimum_quantity} / Уровень заказа: {item.reorder_level}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">{formatCurrency(product.price)}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">за {product.unit}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900 dark:text-white">
-                                                    {formatCurrency(item.quantity * product.price)}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                            ${item.status === 'in-stock' && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}
-                            ${item.status === 'low-stock' && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}
-                            ${item.status === 'out-of-stock' && 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'}
-                            ${item.status === 'over-stock' && 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}
-                          `}>
-                            {item.status === 'in-stock' && 'В наличии'}
-                              {item.status === 'low-stock' && 'Заканчивается'}
-                              {item.status === 'out-of-stock' && 'Отсутствует'}
-                              {item.status === 'over-stock' && 'Избыток'}
-                          </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                                {item.last_count_date ? (
-                                                    <div>
-                                                        <div>{formatDateTime(item.last_count_date)}</div>
-                                                        <div className="text-xs">{item.last_counted_by}</div>
-                                                    </div>
+                                return (
+                                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                {product.image_url ? (
+                                                    <img
+                                                        src={product.image_url}
+                                                        alt={product.name}
+                                                        className="h-10 w-10 rounded-md object-cover mr-3"
+                                                    />
                                                 ) : (
-                                                    'Не проверялось'
+                                                    <div className="h-10 w-10 rounded-md bg-gray-200 dark:bg-gray-600 flex items-center justify-center mr-3">
+                                                        <DocumentTextIcon className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                                                    </div>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                <button
-                                                    onClick={() => {
-                                                        setSelectedProductId(product.id);
-                                                        setSelectedWarehouseId(item.warehouse_id);
-                                                        setShowProductDetailsModal(true);
-                                                    }}
-                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-3"
-                                                >
-                                                    Детали
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setNewInventoryCount({
-                                                            product_id: product.id,
-                                                            warehouse_id: item.warehouse_id,
-                                                            new_quantity: item.quantity,
-                                                            notes: ''
-                                                        });
-                                                        setShowInventoryCountModal(true);
-                                                    }}
-                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                                >
-                                                    Пересчет
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                            </tbody>
-                        </table>
-                    </div>
+                                                <div>
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                                        {product.name}
+                                                        {product.sr_sync && (
+                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                                    Север-Рыба
+                                                                </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {product.supplier ? `Поставщик: ${product.supplier}` : 'Поставщик не указан'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">{product.sku}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">{product.category_name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">{item.warehouse_name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">
+                                                {item.quantity} {product.unit}
+                                                {item.quantity_reserved && item.quantity_reserved > 0 && (
+                                                    <span className="ml-1 text-xs text-yellow-600 dark:text-yellow-400">
+                                                            (зарез. {item.quantity_reserved})
+                                                        </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                Мин.: {item.minimum_quantity} / Уровень заказа: {item.reorder_level}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">{formatCurrency(product.price)}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">за {product.unit}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-900 dark:text-white">
+                                                {formatCurrency(item.quantity * product.price)}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                                    ${item.status === 'in-stock' && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}
+                                                    ${item.status === 'low-stock' && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}
+                                                    ${item.status === 'out-of-stock' && 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'}
+                                                    ${item.status === 'over-stock' && 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}
+                                                `}>
+                                                    {item.status === 'in-stock' && 'В наличии'}
+                                                    {item.status === 'low-stock' && 'Заканчивается'}
+                                                    {item.status === 'out-of-stock' && 'Отсутствует'}
+                                                    {item.status === 'over-stock' && 'Избыток'}
+                                                </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            {item.last_count_date ? (
+                                                <div>
+                                                    <div>{formatDateTime(item.last_count_date)}</div>
+                                                    <div className="text-xs">{item.last_counted_by}</div>
+                                                </div>
+                                            ) : (
+                                                'Не проверялось'
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedProductId(product.id);
+                                                    setSelectedWarehouseId(item.warehouse_id);
+                                                    setShowProductDetailsModal(true);
+                                                }}
+                                                className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-3"
+                                            >
+                                                Детали
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setNewInventoryCount({
+                                                        product_id: product.id,
+                                                        warehouse_id: item.warehouse_id,
+                                                        new_quantity: item.quantity,
+                                                        notes: ''
+                                                    });
+                                                    setShowInventoryCountModal(true);
+                                                }}
+                                                className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                            >
+                                                Пересчет
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                        </tbody>
+                    </table>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Inventory Count Modal */}
-            {showInventoryCountModal && (
-                <div className="fixed inset-0 z-50 overflow-y-auto">
-                    <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                            <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
+        {/* Inventory Count Modal */}
+        {showInventoryCountModal && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+                <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                    <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+                        <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
+                    </div>
+
+                    {/* Modal */}
+                    <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                        {/* Modal header */}
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <h2 className="text-xl font-medium text-gray-900 dark:text-white">
+                                Пересчет товара
+                            </h2>
+                            <button onClick={() => setShowInventoryCountModal(false)} className="text-gray-400 hover:text-gray-500">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
                         </div>
 
-                        {/* Modal */}
-                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                            {/* Modal header */}
-                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                                <h2 className="text-xl font-medium text-gray-900 dark:text-white">
-                                    Пересчет товара
-                                </h2>
-                                <button onClick={() => setShowInventoryCountModal(false)} className="text-gray-400 hover:text-gray-500">
-                                    <XMarkIcon className="h-6 w-6" />
-                                </button>
+                        {/* Form content */}
+                        <div className="px-6 py-4">
+                            <div className="space-y-6">
+                                <div>
+                                    <label htmlFor="count-product" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Товар <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        id="count-product"
+                                        value={newInventoryCount.product_id}
+                                        onChange={(e) => setNewInventoryCount({...newInventoryCount, product_id: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                    >
+                                        <option value="">Выберите товар</option>
+                                        {products.map(product => (
+                                            <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="count-warehouse" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Склад <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        id="count-warehouse"
+                                        value={newInventoryCount.warehouse_id}
+                                        onChange={(e) => {
+                                            const warehouseId = e.target.value;
+                                            setNewInventoryCount({...newInventoryCount, warehouse_id: warehouseId});
+
+                                            // If both product and warehouse are selected - find current quantity
+                                            if (newInventoryCount.product_id && warehouseId) {
+                                                const stockItem = stockItems.find(item => item.product_id === newInventoryCount.product_id &&
+                                                    item.warehouse_id === warehouseId
+                                                );
+
+                                                if (stockItem) {
+                                                    setNewInventoryCount(prev => ({...prev, new_quantity: stockItem.quantity}));
+                                                } else {
+                                                    setNewInventoryCount(prev => ({...prev, new_quantity: 0}));
+                                                }
+                                            }
+                                        }}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                    >
+                                        <option value="">Выберите склад</option>
+                                        {warehouses.map(warehouse => (
+                                            <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {newInventoryCount.product_id && newInventoryCount.warehouse_id && (
+                                    <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
+                                        <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                                            Текущее количество:
+                                        </div>
+                                        <div className="text-lg font-medium text-gray-900 dark:text-white">
+                                            {(() => {
+                                                const stockItem = stockItems.find(item =>
+                                                    item.product_id === newInventoryCount.product_id &&
+                                                    item.warehouse_id === newInventoryCount.warehouse_id
+                                                );
+
+                                                if (stockItem) {
+                                                    const product = products.find(p => p.id === newInventoryCount.product_id);
+                                                    return `${stockItem.quantity} ${product ? product.unit : 'ед.'}`;
+                                                } else {
+                                                    return 'Товар отсутствует на этом складе';
+                                                }
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label htmlFor="new-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Новое количество <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="new-quantity"
+                                        value={newInventoryCount.new_quantity}
+                                        onChange={(e) => setNewInventoryCount({...newInventoryCount, new_quantity: parseFloat(e.target.value) || 0})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="count-notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Примечание
+                                    </label>
+                                    <textarea
+                                        id="count-notes"
+                                        value={newInventoryCount.notes}
+                                        onChange={(e) => setNewInventoryCount({...newInventoryCount, notes: e.target.value})}
+                                        rows={3}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                        placeholder="Причина корректировки"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowInventoryCountModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-md mr-2"
+                            >
+                                Отмена
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleInventoryCount}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                                disabled={!newInventoryCount.product_id || !newInventoryCount.warehouse_id}
+                            >
+                                Сохранить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Add Product Modal */}
+        {showAddProductModal && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+                <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                    <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+                        <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
+                    </div>
+
+                    {/* Modal */}
+                    <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                        {/* Modal header */}
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                            <h2 className="text-xl font-medium text-gray-900 dark:text-white">
+                                Добавление нового товара
+                            </h2>
+                            <button onClick={() => setShowAddProductModal(false)} className="text-gray-400 hover:text-gray-500">
+                                <XMarkIcon className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        {/* Form content */}
+                        <div className="px-6 py-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                                <div>
+                                    <label htmlFor="sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Артикул (SKU) <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="sku"
+                                        value={newProduct.sku || ''}
+                                        onChange={(e) => setNewProduct({...newProduct, sku: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                        placeholder="Например: FR-001"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Наименование <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="name"
+                                        value={newProduct.name || ''}
+                                        onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                        placeholder="Введите название товара"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Категория <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        id="category"
+                                        value={newProduct.category_id || ''}
+                                        onChange={(e) => setNewProduct({...newProduct, category_id: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                    >
+                                        <option value="">Выберите категорию</option>
+                                        {categories.map(category => (
+                                            <option key={category.id} value={category.id}>{category.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Единица измерения
+                                    </label>
+                                    <select
+                                        id="unit"
+                                        value={newProduct.unit || 'кг'}
+                                        onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                    >
+                                        <option value="кг">кг (килограмм)</option>
+                                        <option value="шт">шт (штука)</option>
+                                        <option value="л">л (литр)</option>
+                                        <option value="упак">упак (упаковка)</option>
+                                        <option value="ящик">ящик</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Цена <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            id="price"
+                                            value={newProduct.price || 0}
+                                            onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
+                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                            placeholder="0.00"
+                                            min="0"
+                                            step="0.01"
+                                        />
+                                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                            <span className="text-gray-500">₽</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                        Поставщик
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="supplier"
+                                        value={newProduct.supplier || ''}
+                                        onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})}
+                                        className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                        placeholder="Название поставщика"
+                                    />
+                                </div>
                             </div>
 
-                            {/* Form content */}
-                            <div className="px-6 py-4">
-                                <div className="space-y-6">
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-6">
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                                    Первоначальный складской запас
+                                </h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div>
-                                        <label htmlFor="count-product" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Товар <span className="text-red-500">*</span>
+                                        <label htmlFor="stock-warehouse" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Склад
                                         </label>
                                         <select
-                                            id="count-product"
-                                            value={newInventoryCount.product_id}
-                                            onChange={(e) => setNewInventoryCount({...newInventoryCount, product_id: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                        >
-                                            <option value="">Выберите товар</option>
-                                            {products.map(product => (
-                                                <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="count-warehouse" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Склад <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            id="count-warehouse"
-                                            value={newInventoryCount.warehouse_id}
-                                            onChange={(e) => {
-                                                const warehouseId = e.target.value;
-                                                setNewInventoryCount({...newInventoryCount, warehouse_id: warehouseId});
-
-                                                // If both product and warehouse are selected - find current quantity
-                                                if (newInventoryCount.product_id && warehouseId) {
-                                                    const stockItem = stockItems.find(item => item.product_id === newInventoryCount.product_id &&
-                                                        item.warehouse_id === warehouseId
-                                                    );
-
-                                                    if (stockItem) {
-                                                        setNewInventoryCount(prev => ({...prev, new_quantity: stockItem.quantity}));
-                                                    } else {
-                                                        setNewInventoryCount(prev => ({...prev, new_quantity: 0}));
-                                                    }
-                                                }
-                                            }}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                            id="stock-warehouse"
+                                            value={newStockItem.warehouse_id || ''}
+                                            onChange={(e) => setNewStockItem({...newStockItem, warehouse_id: e.target.value})}
+                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
                                         >
                                             <option value="">Выберите склад</option>
                                             {warehouses.map(warehouse => (
@@ -799,314 +1012,77 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                                         </select>
                                     </div>
 
-                                    {newInventoryCount.product_id && newInventoryCount.warehouse_id && (
-                                        <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-                                            <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                                Текущее количество:
-                                            </div>
-                                            <div className="text-lg font-medium text-gray-900 dark:text-white">
-                                                {(() => {
-                                                    const stockItem {(() => {
-                                                        const stockItem = stockItems.find(item =>
-                                                            item.product_id === newInventoryCount.product_id &&
-                                                            item.warehouse_id === newInventoryCount.warehouse_id
-                                                        );
-
-                                                        if (stockItem) {
-                                                            const product = products.find(p => p.id === newInventoryCount.product_id);
-                                                            return `${stockItem.quantity} ${product ? product.unit : 'ед.'}`;
-                                                        } else {
-                                                            return 'Товар отсутствует на этом складе';
-                                                        }
-                                                    })()}
-                                                </div>
-                                                </div>
-                                                )}
-
-                                                    <div>
-                                                    <label htmlFor="new-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                    Новое количество <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <input
-                                                    type="number"
-                                                    id="new-quantity"
-                                                    value={newInventoryCount.new_quantity}
-                                                 onChange={(e) => setNewInventoryCount({...newInventoryCount, new_quantity: parseFloat(e.target.value) || 0})}
-                                                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                                 min="0"
-                                                 step="0.01"
-                                            />
-                                        </div>
-
-                                        <div>
-                                        <label htmlFor="count-notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Примечание
-                                        </label>
-                                        <textarea
-                                        id="count-notes"
-                                        value={newInventoryCount.notes}
-                                     onChange={(e) => setNewInventoryCount({...newInventoryCount, notes: e.target.value})}
-                                     rows={3}
-                                     className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                     placeholder="Причина корректировки"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-                        <button
-                            type="button"
-                            onClick={() => setShowInventoryCountModal(false)}
-                            className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600
-                      text-gray-800 dark:text-white px-4 py-2 rounded-md mr-2"
-                        >
-                            Отмена
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleInventoryCount}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                            disabled={!newInventoryCount.product_id || !newInventoryCount.warehouse_id}
-                        >
-                            Сохранить
-                        </button>
-                    </div>
-                </div>
-                </div>
-                </div>
-                )}
-
-            {/* Add Product Modal */}
-            {showAddProductModal && (
-                <div className="fixed inset-0 z-50 overflow-y-auto">
-                    <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                            <div className="absolute inset-0 bg-gray-500 dark:bg-gray-900 opacity-75"></div>
-                        </div>
-
-                        {/* Modal */}
-                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-                            {/* Modal header */}
-                            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                                <h2 className="text-xl font-medium text-gray-900 dark:text-white">
-                                    Добавление нового товара
-                                </h2>
-                                <button onClick={() => setShowAddProductModal(false)} className="text-gray-400 hover:text-gray-500">
-                                    <XMarkIcon className="h-6 w-6" />
-                                </button>
-                            </div>
-
-                            {/* Form content */}
-                            <div className="px-6 py-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                                     <div>
-                                        <label htmlFor="sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Артикул (SKU) <span className="text-red-500">*</span>
+                                        <label htmlFor="stock-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Количество
                                         </label>
                                         <input
-                                            type="text"
-                                            id="sku"
-                                            value={newProduct.sku || ''}
-                                            onChange={(e) => setNewProduct({...newProduct, sku: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                            placeholder="Например: FR-001"
+                                            type="number"
+                                            id="stock-quantity"
+                                            value={newStockItem.quantity || 0}
+                                            onChange={(e) => setNewStockItem({...newStockItem, quantity: parseFloat(e.target.value) || 0})}
+                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                            min="0"
+                                            step="0.01"
                                         />
                                     </div>
 
                                     <div>
-                                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Наименование <span className="text-red-500">*</span>
+                                        <label htmlFor="stock-min-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Минимальное количество
                                         </label>
                                         <input
-                                            type="text"
-                                            id="name"
-                                            value={newProduct.name || ''}
-                                            onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                            placeholder="Введите название товара"
+                                            type="number"
+                                            id="stock-min-quantity"
+                                            value={newStockItem.minimum_quantity || 0}
+                                            onChange={(e) => setNewStockItem({...newStockItem, minimum_quantity: parseFloat(e.target.value) || 0})}
+                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                            min="0"
+                                            step="0.01"
                                         />
                                     </div>
 
                                     <div>
-                                        <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Категория <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            id="category"
-                                            value={newProduct.category_id || ''}
-                                            onChange={(e) => setNewProduct({...newProduct, category_id: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                        >
-                                            <option value="">Выберите категорию</option>
-                                            {categories.map(category => (
-                                                <option key={category.id} value={category.id}>{category.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Единица измерения
-                                        </label>
-                                        <select
-                                            id="unit"
-                                            value={newProduct.unit || 'кг'}
-                                            onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                        >
-                                            <option value="кг">кг (килограмм)</option>
-                                            <option value="шт">шт (штука)</option>
-                                            <option value="л">л (литр)</option>
-                                            <option value="упак">упак (упаковка)</option>
-                                            <option value="ящик">ящик</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Цена <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                id="price"
-                                                value={newProduct.price || 0}
-                                                onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value) || 0})}
-                                                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                            bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                                placeholder="0.00"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                                <span className="text-gray-500">₽</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            Поставщик
+                                        <label htmlFor="stock-reorder-level" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Уровень для заказа
                                         </label>
                                         <input
-                                            type="text"
-                                            id="supplier"
-                                            value={newProduct.supplier || ''}
-                                            onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})}
-                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                            placeholder="Название поставщика"
+                                            type="number"
+                                            id="stock-reorder-level"
+                                            value={newStockItem.reorder_level || 0}
+                                            onChange={(e) => setNewStockItem({...newStockItem, reorder_level: parseFloat(e.target.value) || 0})}
+                                            className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                                            min="0"
+                                            step="0.01"
                                         />
                                     </div>
                                 </div>
-
-                                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-6">
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                                        Первоначальный складской запас
-                                    </h3>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <div>
-                                            <label htmlFor="stock-warehouse" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Склад
-                                            </label>
-                                            <select
-                                                id="stock-warehouse"
-                                                value={newStockItem.warehouse_id || ''}
-                                                onChange={(e) => setNewStockItem({...newStockItem, warehouse_id: e.target.value})}
-                                                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                            bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                            >
-                                                <option value="">Выберите склад</option>
-                                                {warehouses.map(warehouse => (
-                                                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label htmlFor="stock-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Количество
-                                            </label>
-                                            <input
-                                                type="number"
-                                                id="stock-quantity"
-                                                value={newStockItem.quantity || 0}
-                                                onChange={(e) => setNewStockItem({...newStockItem, quantity: parseFloat(e.target.value) || 0})}
-                                                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                            bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label htmlFor="stock-min-quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Минимальное количество
-                                            </label>
-                                            <input
-                                                type="number"
-                                                id="stock-min-quantity"
-                                                value={newStockItem.minimum_quantity || 0}
-                                                onChange={(e) => setNewStockItem({...newStockItem, minimum_quantity: parseFloat(e.target.value) || 0})}
-                                                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                            bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label htmlFor="stock-reorder-level" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Уровень для заказа
-                                            </label>
-                                            <input
-                                                type="number"
-                                                id="stock-reorder-level"
-                                                value={newStockItem.reorder_level || 0}
-                                                onChange={(e) => setNewStockItem({...newStockItem, reorder_level: parseFloat(e.target.value) || 0})}
-                                                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                            bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
+                        </div>
 
-                            {/* Action buttons */}
-                            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAddProductModal(false)}
-                                    className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600
-                      text-gray-800 dark:text-white px-4 py-2 rounded-md mr-2"
-                                >
-                                    Отмена
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleAddProduct}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                                >
-                                    Добавить товар
-                                </button>
-                            </div>
+                        {/* Action buttons */}
+                        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddProductModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-md mr-2"
+                            >
+                                Отмена
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleAddProduct}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+                            >
+                                Добавить товар
+                            </button>
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Product Details Modal */}
+        {/* Product Details Modal */}
             {showProductDetailsModal && selectedProduct && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1152,8 +1128,8 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                                                     {selectedProduct.name}
                                                     {selectedProduct.sr_sync && (
                                                         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                              Север-Рыба
-                            </span>
+                                                            Север-Рыба
+                                                        </span>
                                                     )}
                                                 </h3>
                                                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -1221,23 +1197,23 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                                                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900 dark:text-white">
                                                                     {stock.quantity} {selectedProduct.unit}
                                                                 </td>
-                                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500 dark:text-gray-400">
+                                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-900 dark:text-white">
                                                                     {stock.minimum_quantity} {selectedProduct.unit}
                                                                 </td>
                                                                 <td className="px-4 py-3 whitespace-nowrap text-center">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                                      ${stock.status === 'in-stock' && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}
-                                      ${stock.status === 'low-stock' && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}
-                                      ${stock.status === 'out-of-stock' && 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'}
-                                      ${stock.status === 'over-stock' && 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}
-                                    `}>
-                                      {stock.status === 'in-stock' && 'В наличии'}
-                                        {stock.status === 'low-stock' && 'Заканчивается'}
-                                        {stock.status === 'out-of-stock' && 'Отсутствует'}
-                                        {stock.status === 'over-stock' && 'Избыток'}
-                                    </span>
+                                                                                                                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                                                        ${stock.status === 'in-stock' && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'}
+                                                                        ${stock.status === 'low-stock' && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'}
+                                                                        ${stock.status === 'out-of-stock' && 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'}
+                                                                        ${stock.status === 'over-stock' && 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}
+                                                                    `}>
+                                                                        {stock.status === 'in-stock' && 'В наличии'}
+                                                                                                                                            {stock.status === 'low-stock' && 'Заканчивается'}
+                                                                                                                                            {stock.status === 'out-of-stock' && 'Отсутствует'}
+                                                                                                                                            {stock.status === 'over-stock' && 'Избыток'}
+                                                                    </span>
                                                                 </td>
-                                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
                                                                     <button
                                                                         onClick={() => {
                                                                             setNewInventoryCount({
@@ -1262,71 +1238,45 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                                             )}
                                         </div>
 
-                                        {/* Data from Север-Рыба */}
-                                        {selectedProduct.sr_sync && (
-                                            <div className="mt-6">
-                                                <h4 className="text-lg font-medium text-blue-600 dark:text-blue-400 mb-3">Данные в системе Север-Рыба</h4>
-                                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                                                    <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                                                        <div>
-                                                            <div className="text-sm text-blue-600 dark:text-blue-400">Количество</div>
-                                                            <div className="text-lg font-medium text-blue-700 dark:text-blue-300">
-                                                                {selectedProduct.sr_stock_quantity || 0} {selectedProduct.unit}
-                                                            </div>
+                                        {/* Additional Information */}
+                                        <div className="mt-6">
+                                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Дополнительная информация</h4>
+
+                                            <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">Дата создания</div>
+                                                        <div className="text-sm text-gray-900 dark:text-white">
+                                                            {formatDateTime(selectedProduct.created_at)}
                                                         </div>
-                                                        <div>
-                                                            <div className="text-sm text-blue-600 dark:text-blue-400">Стоимость общая</div>
-                                                            <div className="text-lg font-medium text-blue-700 dark:text-blue-300">
-                                                                {formatCurrency((selectedProduct.sr_stock_quantity || 0) * selectedProduct.price)}
-                                                            </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">Последнее обновление</div>
+                                                        <div className="text-sm text-gray-900 dark:text-white">
+                                                            {formatDateTime(selectedProduct.updated_at)}
                                                         </div>
-                                                        <div className="col-span-2">
-                                                            <div className="text-sm text-blue-600 dark:text-blue-400">Статус синхронизации</div>
-                                                            <div className="text-base text-blue-700 dark:text-blue-300">
-                                                                Синхронизировано {formatDateTime(getCurrentDateTime())}
-                                                            </div>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">ID товара (для API)</div>
+                                                        <div className="text-sm text-gray-900 dark:text-white font-mono">
+                                                            {selectedProduct.id}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Action buttons */}
+                            {/* Footer */}
                             <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
                                 <button
                                     type="button"
                                     onClick={() => setShowProductDetailsModal(false)}
-                                    className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600
-                      text-gray-800 dark:text-white px-4 py-2 rounded-md mr-2"
+                                    className="bg-gray-300 hover:bg-gray-400 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white px-4 py-2 rounded-md"
                                 >
                                     Закрыть
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        // Find related stock positions
-                                        const stockItem = selectedProductStocks.find(item =>
-                                            item.warehouse_id === selectedWarehouseId
-                                        );
-
-                                        if (stockItem) {
-                                            setNewInventoryCount({
-                                                product_id: selectedProduct.id,
-                                                warehouse_id: stockItem.warehouse_id,
-                                                new_quantity: stockItem.quantity,
-                                                notes: ''
-                                            });
-                                            setShowProductDetailsModal(false);
-                                            setShowInventoryCountModal(true);
-                                        }
-                                    }}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                                    disabled={!selectedWarehouseId || selectedProductStocks.length === 0}
-                                >
-                                    Пересчет
                                 </button>
                             </div>
                         </div>
@@ -1334,7 +1284,7 @@ const InventoryManagement: React.FC<InventoryManagementProps> = ({
                 </div>
             )}
         </>
-);
+    );
 };
 
 export default StockManagement;

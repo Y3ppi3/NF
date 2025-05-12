@@ -17,6 +17,7 @@ import Delivery from './pages/Delivery';
 import Home from './pages/Home';
 import NotFound from './pages/NotFound'; // Импортируем новый компонент 404
 import { LoadingProvider } from './context/LoadingContext';
+import { validateApiEndpoints } from './utils/apiValidator';
 
 // Импортируем GIF-анимацию - предзагружаем для быстрого отображения
 import fishGif from './assets/images/340.gif';
@@ -66,6 +67,13 @@ const App: React.FC = () => {
         }, 0);
         
         return () => clearTimeout(timer);
+    }, []);
+
+    useEffect(() => {
+        // Only run in development
+        if (process.env.NODE_ENV === 'development') {
+            validateApiEndpoints();
+        }
     }, []);
 
     const handleToken = (newToken: string) => {
@@ -137,7 +145,7 @@ const App: React.FC = () => {
 
                             <Route
                                 path="warehouse"
-                                element={<Warehouse token={token || ''} />}
+                                element={<Warehouse token ={token || ''} />}
                             />
 
                             <Route

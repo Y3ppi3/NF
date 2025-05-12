@@ -19,6 +19,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid';
+
 import '../styles/Warehouse.css';
 
 // Import the three modules
@@ -30,16 +31,23 @@ import StockMovements from './warehouse/StockMovements';
 import {
   Product,
   StockItem,
-  Warehouse,
+  Warehouse as WarehouseType,
   Category,
   Shipment,
   ShipmentItem,
   StockMovement
 } from './warehouse/interfaces';
 
-// URL for API
-import { API_BASE_URL as BASE_URL } from '../services/api';
-const API_BASE_URL = `${BASE_URL}/api`;
+// Import API constants and functions
+import {
+  API_BASE_URL,
+  getProducts,
+  getStocks,
+  getWarehouses,
+  getCategories,
+  getSupplies,
+  getStockMovements
+} from '../services/api';
 
 // Helper functions
 const getCurrentDateTime = () => {
@@ -54,11 +62,24 @@ const getCurrentUser = () => {
 const SEVER_RYBA_API_URL = `http://localhost:8000`;
 const SEVER_RYBA_API_KEY = localStorage.getItem('severRybaApiKey') || 'sr_api_key_2025';
 
+// Add auth header helper function since it's not exported from api.ts
+const getAxiosAuthConfig = () => {
+  const token = localStorage.getItem('token');
+  return {
+    headers: token ? {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    } : {
+      'Content-Type': 'application/json'
+    }
+  };
+};
+
 const Warehouse: React.FC = () => {
   // State for data
   const [products, setProducts] = useState<Product[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseType[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -72,56 +93,66 @@ const Warehouse: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Request to API to get data from real database
-      const [
-        productsResponse,
-        stockResponse,
-        warehousesResponse,
-        categoriesResponse,
-        shipmentsResponse,
-        stockMovementsResponse
-      ] = await Promise.all([
-        axios.get(`${API_BASE_URL}/products`),
-        axios.get(`${API_BASE_URL}/stocks`),
-        axios.get(`${API_BASE_URL}/warehouses`),
-        axios.get(`${API_BASE_URL}/categories`),
-        axios.get(`${API_BASE_URL}/supplies`),
-        axios.get(`${API_BASE_URL}/stock-movements`)
-      ]);
+      // Use the imported functions where possible
+      const productsData = await getProducts().catch(error => {
+        console.warn("Failed to fetch products:", error);
+        return [];
+      });
 
-      // Direct interaction with Север-Рыбой via API
+      const stocksData = await getStocks().catch(error => {
+        console.warn("Failed to fetch stocks:", error);
+        return [];
+      });
+
+      const warehousesData = await getWarehouses().catch(error => {
+        console.warn("Failed to fetch warehouses:", error);
+        return [];
+      });
+
+      const categoriesData = await getCategories().catch(error => {
+        console.warn("Failed to fetch categories:", error);
+        return [];
+      });
+
+      const suppliesData = await getSupplies().catch(error => {
+        console.warn("Failed to fetch supplies:", error);
+        return [];
+      });
+
+      let stockMovementsData: any[] = [];
       try {
-        const severRybaResponse = await axios.get(`${SEVER_RYBA_API_URL}/inventory`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
-            'X-API-Key': SEVER_RYBA_API_KEY
+        stockMovementsData = await getStockMovements();
+      } catch (error) {
+        console.warn("Failed to fetch stock movements:", error);
+        // Try direct axios call as fallback using both possible endpoints
+        try {
+          // Try with /api prefix first
+          const response = await axios.get(`${API_BASE_URL}/api/stock-movements`, getAxiosAuthConfig());
+          stockMovementsData = response.data;
+        } catch (directError) {
+          // Then try without /api prefix
+          try {
+            const fallbackResponse = await axios.get(`${API_BASE_URL}/stock-movements`, getAxiosAuthConfig());
+            stockMovementsData = fallbackResponse.data;
+          } catch (finalError) {
+            console.error("All attempts to fetch stock movements failed:", finalError);
+            stockMovementsData = [];
           }
-        });
-
-        // Combine data from AIS and Север-Рыба
-        const combinedProducts = mergeProductData(
-            productsResponse.data,
-            severRybaResponse.data.products,
-            categoriesResponse.data
-        );
-
-        setProducts(combinedProducts);
-      } catch (syncError) {
-        console.error("Failed to sync with Север-Рыба:", syncError);
-        // Use only data from our system
-        setProducts(productsResponse.data);
+        }
       }
 
-      setStockItems(stockResponse.data);
-      setWarehouses(warehousesResponse.data);
-      setCategories(categoriesResponse.data);
-      setShipments(shipmentsResponse.data);
-      setStockMovements(stockMovementsResponse.data);
+      // Set state with the fetched data
+      setProducts(productsData);
+      setStockItems(stocksData);
+      setWarehouses(warehousesData);
+      setCategories(categoriesData);
+      setShipments(suppliesData);
+      setStockMovements(stockMovementsData);
 
       setError(null);
     } catch (err) {
       console.error("Failed to fetch warehouse data:", err);
-      setError("Не удалось загрузить данные склада.");
+      setError("Не удалось загрузить данные склада. Пожалуйста, проверьте подключение.");
     } finally {
       setIsLoading(false);
     }
@@ -185,34 +216,66 @@ const Warehouse: React.FC = () => {
   };
 
   // Function to sync data with Север-Рыба
-  const syncWithSeverRyba = async () => {
-    setIsLoading(true);
+  const syncWithSeverRyba = async (showAlerts = true) => {
+    if (showAlerts) setIsLoading(true);
+
     try {
-      // Get actual data from Север-Рыба
-      const severRybaResponse = await axios.get(`${SEVER_RYBA_API_URL}/inventory`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
-          'X-API-Key': SEVER_RYBA_API_KEY
+      // Try different possible endpoints for Север-Рыба API
+      let severRybaData = { products: [] };
+
+      try {
+        // First try /inventory
+        const response = await axios.get(`${SEVER_RYBA_API_URL}/inventory`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
+            'X-API-Key': SEVER_RYBA_API_KEY
+          }
+        });
+        severRybaData = response.data;
+      } catch (err) {
+        try {
+          // Then try /products
+          const response = await axios.get(`${SEVER_RYBA_API_URL}/products`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
+              'X-API-Key': SEVER_RYBA_API_KEY
+            }
+          });
+          severRybaData = { products: response.data };
+        } catch (innerErr) {
+          // Finally try /api/products
+          try {
+            const response = await axios.get(`${SEVER_RYBA_API_URL}/api/products`, {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('severRybaToken')}`,
+                'X-API-Key': SEVER_RYBA_API_KEY
+              }
+            });
+            severRybaData = { products: response.data };
+          } catch (finalErr) {
+            console.error("All Север-Рыба API attempts failed:", finalErr);
+            throw new Error("Не удалось подключиться к API Север-Рыба");
+          }
         }
-      });
+      }
 
       // Get actual data from our DB
-      const productsResponse = await axios.get(`${API_BASE_URL}/products`);
+      const productsResponse = await axios.get(`${API_BASE_URL}/api/products`, getAxiosAuthConfig());
 
       // Combine data
       const combinedProducts = mergeProductData(
           productsResponse.data,
-          severRybaResponse.data.products,
+          severRybaData.products || [],
           categories
       );
 
       // Update products that have changed
       for (const product of combinedProducts) {
         if (product.sr_sync) {
-          await axios.put(`${API_BASE_URL}/products/${product.id}`, {
+          await axios.put(`${API_BASE_URL}/api/products/${product.id}`, {
             price: product.price,
             updated_at: new Date().toISOString()
-          });
+          }, getAxiosAuthConfig());
 
           // If we have stock in our system but it's not in Север-Рыба
           // or vice versa - create or update records
@@ -224,27 +287,31 @@ const Warehouse: React.FC = () => {
 
             if (stockItem) {
               // Update existing stock record
-              await axios.patch(`${API_BASE_URL}/stocks/${stockItem.id}`, {
+              await axios.patch(`${API_BASE_URL}/api/stocks/${stockItem.id}`, {
                 quantity: product.sr_stock_quantity,
                 last_count_date: new Date().toISOString(),
                 last_counted_by: 'Север-Рыба Sync',
                 status: determineStockStatus(product.sr_stock_quantity, stockItem.minimum_quantity)
-              });
+              }, getAxiosAuthConfig());
 
-              // Create stock movement record
-              await axios.post(`${API_BASE_URL}/stock-movements`, {
-                product_id: product.id,
-                warehouse_id: '1',
-                quantity: product.sr_stock_quantity - stockItem.quantity,
-                previous_quantity: stockItem.quantity,
-                movement_type: 'adjustment',
-                performed_by: 'Север-Рыба Sync',
-                movement_date: new Date().toISOString(),
-                notes: 'Автоматическая синхронизация с Север-Рыба'
-              });
+              // Try to create stock movement record
+              try {
+                await axios.post(`${API_BASE_URL}/api/stock-movements`, {
+                  product_id: product.id,
+                  warehouse_id: '1',
+                  quantity: product.sr_stock_quantity - stockItem.quantity,
+                  previous_quantity: stockItem.quantity,
+                  movement_type: 'adjustment',
+                  performed_by: 'Север-Рыба Sync',
+                  movement_date: new Date().toISOString(),
+                  notes: 'Автоматическая синхронизация с Север-Рыба'
+                }, getAxiosAuthConfig());
+              } catch (moveError) {
+                console.warn("Failed to create stock movement:", moveError);
+              }
             } else {
               // Create new stock record
-              await axios.post(`${API_BASE_URL}/stocks`, {
+              await axios.post(`${API_BASE_URL}/api/stocks`, {
                 product_id: product.id,
                 warehouse_id: '1',
                 quantity: product.sr_stock_quantity,
@@ -253,33 +320,41 @@ const Warehouse: React.FC = () => {
                 status: determineStockStatus(product.sr_stock_quantity, 5),
                 last_count_date: new Date().toISOString(),
                 last_counted_by: 'Север-Рыба Sync'
-              });
+              }, getAxiosAuthConfig());
 
-              // Create stock movement record
-              await axios.post(`${API_BASE_URL}/stock-movements`, {
-                product_id: product.id,
-                warehouse_id: '1',
-                quantity: product.sr_stock_quantity,
-                previous_quantity: 0,
-                movement_type: 'receipt',
-                performed_by: 'Север-Рыба Sync',
-                movement_date: new Date().toISOString(),
-                notes: 'Первоначальное добавление через синхронизацию с Север-Рыба'
-              });
+              // Try to create stock movement record
+              try {
+                await axios.post(`${API_BASE_URL}/api/stock-movements`, {
+                  product_id: product.id,
+                  warehouse_id: '1',
+                  quantity: product.sr_stock_quantity,
+                  previous_quantity: 0,
+                  movement_type: 'receipt',
+                  performed_by: 'Север-Рыба Sync',
+                  movement_date: new Date().toISOString(),
+                  notes: 'Первоначальное добавление через синхронизацию с Север-Рыба'
+                }, getAxiosAuthConfig());
+              } catch (moveError) {
+                console.warn("Failed to create stock movement:", moveError);
+              }
             }
           }
         }
       }
 
       // Update page data
-      fetchData();
+      await fetchData();
 
-      alert('Синхронизация с Север-Рыба выполнена успешно!');
+      if (showAlerts) {
+        alert('Синхронизация с Север-Рыба выполнена успешно!');
+      }
     } catch (err) {
       console.error("Ошибка при синхронизации с Север-Рыба:", err);
-      alert('Не удалось выполнить синхронизацию с Север-Рыба. Пожалуйста, проверьте подключение и попробуйте снова.');
+      if (showAlerts) {
+        alert('Не удалось выполнить синхронизацию с Север-Рыба. Пожалуйста, проверьте подключение и попробуйте снова.');
+      }
     } finally {
-      setIsLoading(false);
+      if (showAlerts) setIsLoading(false);
     }
   };
 
@@ -353,10 +428,15 @@ const Warehouse: React.FC = () => {
 
           <div className="flex space-x-2">
             <button
-                onClick={syncWithSeverRyba}
+                onClick={() => syncWithSeverRyba(true)}
                 className="bg-orange-600 hover:bg-orange-700 text-white py-2 px-4 rounded-md flex items-center"
+                disabled={isLoading}
             >
-              <ArrowPathIcon className="h-5 w-5 mr-1" />
+              {isLoading ? (
+                  <span className="animate-spin mr-1">⟳</span>
+              ) : (
+                  <ArrowPathIcon className="h-5 w-5 mr-1" />
+              )}
               Синхронизация с Север-Рыба
             </button>
           </div>
@@ -413,6 +493,28 @@ const Warehouse: React.FC = () => {
           </div>
         </div>
 
+        {/* Error message display */}
+        {error && (
+            <div className="mb-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+              <strong className="font-bold">Ошибка!</strong>
+              <span className="block sm:inline"> {error}</span>
+              <button
+                  className="absolute top-0 right-0 px-4 py-3"
+                  onClick={() => setError(null)}
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+        )}
+
+        {/* Loading indicator */}
+        {isLoading && (
+            <div className="mb-6 p-4 flex justify-center items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <span className="ml-2 text-gray-600 dark:text-gray-300">Загрузка данных...</span>
+            </div>
+        )}
+
         {/* Tabs */}
         <div className="border-b border-gray-200 dark:border-gray-700 mb-4">
           <nav className="-mb-px flex space-x-8">
@@ -460,7 +562,7 @@ const Warehouse: React.FC = () => {
                 warehouses={warehouses}
                 categories={categories}
                 fetchData={fetchData}
-                API_BASE_URL={API_BASE_URL}
+                API_BASE_URL={`${API_BASE_URL}/api`}
                 getCurrentDateTime={getCurrentDateTime}
                 getCurrentUser={getCurrentUser}
                 determineStockStatus={determineStockStatus}
@@ -474,7 +576,7 @@ const Warehouse: React.FC = () => {
                 shipments={shipments}
                 warehouses={warehouses}
                 fetchData={fetchData}
-                API_BASE_URL={API_BASE_URL}
+                API_BASE_URL={`${API_BASE_URL}/api`}
                 getCurrentDateTime={getCurrentDateTime}
                 getCurrentUser={getCurrentUser}
             />
@@ -488,24 +590,13 @@ const Warehouse: React.FC = () => {
                 warehouses={warehouses}
                 stockMovements={stockMovements}
                 fetchData={fetchData}
-                API_BASE_URL={API_BASE_URL}
+                API_BASE_URL={`${API_BASE_URL}/api`}
                 getCurrentDateTime={getCurrentDateTime}
                 getCurrentUser={getCurrentUser}
             />
         )}
 
         {/* Footer */}
-        <div className="mt-8 text-xs text-gray-500 dark:text-gray-400">
-          <div className="flex justify-between items-center">
-            <div>
-              <p>Система управления складскими запасами</p>
-            </div>
-            <div className="text-right">
-              <p>Последнее обновление: {getCurrentDateTime()}</p>
-              <p>Пользователь: {getCurrentUser()}</p>
-            </div>
-          </div>
-        </div>
       </div>
   );
 };
