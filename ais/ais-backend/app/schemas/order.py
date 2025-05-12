@@ -33,8 +33,7 @@ class OrderInDB(OrderBase):
     courier_name: Optional[str] = None
     delivery_notes: Optional[str] = None
     estimated_delivery: Optional[date] = None
-    order_items: Optional[str] = None  # JSON строка для хранения элементов заказа
-
+    order_items: Optional[str] = None
     model_config = ConfigDict(from_attributes=True, frozen=True)
 
 

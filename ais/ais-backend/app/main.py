@@ -93,6 +93,7 @@ app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
 app.include_router(orders.router, prefix="/orders", tags=["Orders"])
 
 app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
+# app.include_router(payments.router, prefix="/payments", tags=["Payments"])
 
 app.include_router(warehouse.router, prefix="/api", tags=["warehouse"])
 app.include_router(warehouse.router, tags=["warehouse"])

@@ -1,40 +1,50 @@
 # app/crud/supply.py
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
-from app.models.supply import Supply, SupplyItem
-from app.models.product import Product
-from app.models.warehouse import Warehouse
-from app.schemas.supply import SupplyCreate, SupplyUpdate, SupplyItemUpdate
-from app.schemas.enums import SupplyStatus, MovementType
-
-
-def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
-    """Получение поставки по ID"""
-    return db.query(Supply).filter(Supply.id == supply_id).first()
+from app.models import Supply, SupplyItem, Product, Warehouse, StockMovement
+from app.schemas import SupplyCreate, SupplyUpdate, SupplyItemUpdate, StockMovementCreate
+from app.models.enums import SupplyStatus, StockMovementType
+from app.crud.stock_movement import create_stock_movement, update_product_stock
+from app.crud.stock import update_product_stock
 
 
 def get_supplies(
         db: Session,
         skip: int = 0,
         limit: int = 100,
-        supplier: Optional[str] = None,
-        warehouse_id: Optional[int] = None,
-        status: Optional[SupplyStatus] = None
+        filters: Dict = None,
+        date_filter: Dict = None
 ) -> List[Supply]:
     """Получение списка поставок с возможностью фильтрации"""
     query = db.query(Supply)
 
-    if supplier:
-        query = query.filter(Supply.supplier.ilike(f"%{supplier}%"))
-    if warehouse_id:
-        query = query.filter(Supply.warehouse_id == warehouse_id)
-    if status:
-        query = query.filter(Supply.status == status)
+    # Применение фильтров
+    if filters:
+        for field, value in filters.items():
+            if value is not None:
+                query = query.filter(getattr(Supply, field) == value)
 
-    return query.order_by(desc(Supply.created_at)).offset(skip).limit(limit).all()
+    # Фильтрация по диапазону дат
+    if date_filter and "start" in date_filter:
+        query = query.filter(Supply.shipment_date >= date_filter["start"])
+    if date_filter and "end" in date_filter:
+        query = query.filter(Supply.shipment_date <= date_filter["end"])
+
+    # Загружаем связанные данные для оптимизации запросов
+    query = query.options(joinedload(Supply.items), joinedload(Supply.warehouse))
+
+    # Применяем пагинацию и сортировку
+    return query.order_by(Supply.created_at.desc()).offset(skip).limit(limit).all()
+
+
+def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
+    """Получение поставки по ID"""
+    return db.query(Supply).filter(Supply.id == supply_id).options(
+        joinedload(Supply.items).joinedload(SupplyItem.product),
+        joinedload(Supply.warehouse)
+    ).first()
 
 
 def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
@@ -49,6 +59,8 @@ def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
         reference_number=supply.reference_number,
         notes=supply.notes,
         created_by=username,  # Используем имя текущего пользователя
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
     db.add(db_supply)
     db.flush()  # Получаем ID поставки
@@ -92,6 +104,7 @@ def update_supply(db: Session, supply_id: int, supply_update: SupplyUpdate) -> O
     for key, value in update_data.items():
         setattr(db_supply, key, value)
 
+    db_supply.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_supply)
     return db_supply
@@ -137,88 +150,46 @@ def process_received_supply(db: Session, supply_id: int, username: str) -> bool:
     """
     Обработка полученной поставки путем создания движений запасов для каждого элемента.
     """
-    from app.models.stock_movement import StockMovement
-
+    # Получаем поставку со всеми элементами
     supply = get_supply(db, supply_id)
-    if not supply or supply.status != SupplyStatus.RECEIVED:  # Используем enum вместо строки
+    if not supply or supply.status == SupplyStatus.PROCESSED:
         return False
 
-    # Обрабатываем каждый полученный элемент
+    # Меняем статус поставки
+    supply.status = SupplyStatus.PROCESSED
+    supply.actual_arrival_date = datetime.utcnow()
+    supply.updated_at = datetime.utcnow()
+
+    # Обрабатываем каждый элемент поставки
     for item in supply.items:
-        if item.is_received and item.quantity_received:
-            # Создаем движение запасов (входящее на склад)
-            movement = StockMovement(
-                movement_type=MovementType.RECEIPT,  # Используем enum
-                product_id=item.product_id,
-                quantity=item.quantity_received,
-                target_warehouse_id=item.warehouse_id,
-                reference_id=supply.id,  # Добавляем ID поставки как ссылку
-                notes=f"Поставка #{supply.id} получена: {item.product_name}",
-                created_by=username,
-                created_at=datetime.utcnow()
-            )
-            db.add(movement)
+        # Помечаем элемент как полученный
+        item.is_received = True
+        item.received_date = supply.actual_arrival_date
+        item.quantity_received = item.quantity_ordered  # По умолчанию получено столько же, сколько заказано
 
-            # Обновляем запасы на складе
-            from app.crud.stock import adjust_stock_quantity
-            adjust_stock_quantity(
-                db,
-                product_id=item.product_id,
-                warehouse_id=item.warehouse_id,
-                quantity_change=item.quantity_received
-            )
+        # Создаем движение запасов для пополнения
+        stock_movement = StockMovementCreate(
+            product_id=item.product_id,
+            warehouse_id=item.warehouse_id,
+            quantity=item.quantity_ordered,
+            type=StockMovementType.RECEIPT,
+            reference_id=supply.id,
+            reference_type="supply",
+            notes=f"Поставка №{supply.id} от {supply.supplier}",
+            unit_price=item.unit_price
+        )
 
-    # Отмечаем поставку как обработанную
-    supply.status = SupplyStatus.PROCESSED  # Используем enum
-    supply.updated_at = datetime.utcnow()  # Обновляем дату изменения
+        # Добавляем движение запасов и обновляем запасы
+        create_stock_movement(db, stock_movement, username=username)
+
+        # Обновляем запасы на складе
+        update_product_stock(
+            db=db,
+            product_id=item.product_id,
+            warehouse_id=item.warehouse_id,
+            quantity_change=item.quantity_ordered
+        )
 
     db.commit()
+    db.refresh(supply)
     return True
-
-
-def get_supply_with_details(db: Session, supply_id: int) -> Dict[str, Any]:
-    """Получение поставки с дополнительными данными о складе"""
-    supply = get_supply(db, supply_id)
-    if not supply:
-        return None
-
-    # Получаем имя склада
-    warehouse = db.query(Warehouse.name).filter(Warehouse.id == supply.warehouse_id).first()
-    warehouse_name = warehouse[0] if warehouse else None
-
-    # Конвертируем в словарь для добавления дополнительных данных
-    supply_dict = {
-        "id": supply.id,
-        "supplier": supply.supplier,
-        "warehouse_id": supply.warehouse_id,
-        "warehouse_name": warehouse_name,
-        "status": supply.status,
-        "shipment_date": supply.shipment_date,
-        "expected_arrival_date": supply.expected_arrival_date,
-        "actual_arrival_date": supply.actual_arrival_date,
-        "reference_number": supply.reference_number,
-        "created_by": supply.created_by,
-        "created_at": supply.created_at,
-        "updated_at": supply.updated_at,
-        "notes": supply.notes,
-        "items": []
-    }
-
-    # Добавляем элементы поставки
-    for item in supply.items:
-        item_dict = {
-            "id": item.id,
-            "supply_id": item.supply_id,
-            "product_id": item.product_id,
-            "product_name": item.product_name,
-            "quantity_ordered": item.quantity_ordered,
-            "quantity_received": item.quantity_received,
-            "unit_price": float(item.unit_price),
-            "warehouse_id": item.warehouse_id,
-            "is_received": item.is_received,
-            "received_date": item.received_date,
-            "notes": item.notes
-        }
-        supply_dict["items"].append(item_dict)
-
-    return supply_dict

@@ -450,6 +450,19 @@ def adjust_stock_quantity(
         raise
 
 
+def update_product_stock(db: Session, product_id: int, warehouse_id: int, quantity_change: int) -> Optional[Dict[str, Any]]:
+    """
+    Обновляет количество продукта на складе.
+    Положительное значение quantity_change увеличивает запас, отрицательное - уменьшает.
+    """
+    return adjust_stock_quantity(
+        db=db,
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+        quantity_change=quantity_change
+    )
+
+
 def delete_stock(db: Session, stock_id: int) -> bool:
     """Удаление записи о запасе"""
     stock = db.query(Stock).filter(Stock.id == stock_id).first()

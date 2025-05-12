@@ -96,3 +96,10 @@ def create_stock_movement(db: Session, movement_data: dict) -> Dict[str, Any]:
     except Exception as e:
         db.rollback()
         raise e
+
+def update_product_stock(db: Session, product_id: int, warehouse_id: int, quantity_change: int, username: str = "admin") -> Optional[Dict[str, Any]]:
+    """
+    Прокси-функция для изменения количества запаса.
+    Прямой редирект на adjust_stock_quantity.
+    """
+    return adjust_stock_quantity(db, product_id, warehouse_id, quantity_change, username)

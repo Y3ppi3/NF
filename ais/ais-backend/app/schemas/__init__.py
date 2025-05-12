@@ -84,6 +84,6 @@ from app.schemas.delivery import (
 
 #Экспортируем схемы поставок
 from app.schemas.supply import (
-    SupplyBase, SupplyCreate, SupplyUpdate, SupplyResponse,
+    Supply, SupplyBase, SupplyCreate, SupplyUpdate, SupplyResponse,
     SupplyItemBase, SupplyItemCreate, SupplyItemUpdate, SupplyItem
 )
