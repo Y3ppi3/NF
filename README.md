@@ -1,6 +1,14 @@
-# Север-Рыба: Система управления и клиентская часть
+# AIS + Sever-Fish + api-gateway
 
-![Логотип проекта](./ais/ais-frontend/public/logo.png)
+<div align="center">
+  <img src="./ais/ais-frontend/public/logo.png" alt="sever-fish logo" width="200"/>
+  
+  <p><strong>Automatic Information System [AIS](Автоматическая Информационная Система)</strong></p>
+  
+  ![License](https://img.shields.io/badge/license-MIT-blue)
+  ![Version](https://img.shields.io/badge/version-0.0.0.4.8.1-green)
+  
+</div>
 
 ## Обзор проекта
 
