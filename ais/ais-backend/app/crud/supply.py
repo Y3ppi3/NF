@@ -14,16 +14,27 @@ def get_supplies(
         db: Session,
         skip: int = 0,
         limit: int = 100,
+        supplier: Optional[str] = None,  # Добавляем прямой параметр supplier
+        warehouse_id: Optional[int] = None,  # Добавляем warehouse_id
+        status: Optional[str] = None,  # Добавляем status
         filters: Dict = None,
         date_filter: Dict = None
 ) -> List[Supply]:
     """Получение списка поставок с возможностью фильтрации"""
     query = db.query(Supply)
 
-    # Применение фильтров
+    # Применяем прямые фильтры
+    if supplier:
+        query = query.filter(Supply.supplier == supplier)
+    if warehouse_id:
+        query = query.filter(Supply.warehouse_id == warehouse_id)
+    if status:
+        query = query.filter(Supply.status == status)
+
+    # Применение дополнительных фильтров из словаря (оставляем для обратной совместимости)
     if filters:
         for field, value in filters.items():
-            if value is not None:
+            if value is not None and field not in ['supplier', 'warehouse_id', 'status']:  # Избегаем дублирования
                 query = query.filter(getattr(Supply, field) == value)
 
     # Фильтрация по диапазону дат

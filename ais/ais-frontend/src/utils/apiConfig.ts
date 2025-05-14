@@ -1,14 +1,7 @@
-/**
- * Конфигурация API для фронтенд-приложения
- * @file ais/ais-frontend/src/utils/apiConfig.ts
- * @author katarymba
- * @date 2025-05-06 18:31:33
- */
-
 import axios from 'axios';
 
 // Базовый URL API
-export const API_BASE_URL = "http://127.0.0.1:8001";
+export const API_BASE_URL = "http://localhost:8001";
 
 // Функция для получения токена авторизации из различных хранилищ
 export const getAuthToken = (): string | null => {
@@ -138,6 +131,24 @@ export const API_PRODUCTS_ENDPOINTS = {
   create: (data: any) => apiClient.post('/api/products', data),
   update: (id: number, data: any) => apiClient.put(`/api/products/${id}`, data),
   delete: (id: number) => apiClient.delete(`/api/products/${id}`),
+};
+
+export const API_SUPPLIES_ENDPOINTS = {
+  // Эндпоинты для работы с поставками
+  GET_ALL: `${API_BASE_URL}/api/supplies`,
+  GET_BY_ID: (id: string) => `${API_BASE_URL}/api/supplies/${id}`,
+  CREATE: `${API_BASE_URL}/api/supplies`,
+  UPDATE: (id: string) => `${API_BASE_URL}/api/supplies/${id}`,
+  DELETE: (id: string) => `${API_BASE_URL}/api/supplies/${id}`,
+  PROCESS: (id: string) => `${API_BASE_URL}/api/supplies/${id}/process`,
+
+  // Функции-обертки для удобного использования
+  getAll: (params = {}) => apiClient.get('/api/supplies', { params }),
+  getById: (id: string) => apiClient.get(`/api/supplies/${id}`),
+  create: (data: any) => apiClient.post('/api/supplies', data),
+  update: (id: string, data: any) => apiClient.put(`/api/supplies/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/api/supplies/${id}`),
+  process: (id: string) => apiClient.post(`/api/supplies/${id}/process`),
 };
 
 // Интерфейсы для работы с доставками
@@ -311,6 +322,7 @@ export default {
   delivery: API_DELIVERY_ENDPOINTS,
   orders: API_ORDERS_ENDPOINTS,
   products: API_PRODUCTS_ENDPOINTS,
+  supplies: API_SUPPLIES_ENDPOINTS,
   statusTranslations,
   paymentMethodTranslations,
   formatDate,

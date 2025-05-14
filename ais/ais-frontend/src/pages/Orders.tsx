@@ -1,32 +1,32 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { 
-  Table, 
-  Tag, 
-  Button, 
-  Card, 
-  Select, 
-  Input, 
-  DatePicker, 
-  Typography, 
-  Space, 
-  Drawer, 
-  Form, 
-  notification, 
-  message, 
-  Row, 
-  Col, 
-  Popconfirm, 
+import {
+  Table,
+  Tag,
+  Button,
+  Card,
+  Select,
+  Input,
+  DatePicker,
+  Typography,
+  Space,
+  Drawer,
+  Form,
+  notification,
+  message,
+  Row,
+  Col,
+  Popconfirm,
   Spin,
   Modal,
   Tooltip
 } from 'antd';
-import { 
-  SearchOutlined, 
-  ReloadOutlined, 
-  EyeOutlined, 
-  EditOutlined, 
-  PrinterOutlined, 
-  SendOutlined, 
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  EyeOutlined,
+  EditOutlined,
+  PrinterOutlined,
+  SendOutlined,
   DollarOutlined,
   CheckCircleOutlined,
   SyncOutlined,
@@ -159,11 +159,11 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
   const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
   const [paymentForm] = Form.useForm();
   const [syncingOrder, setSyncingOrder] = useState<number | null>(null);
-  
+
   // API URL и инициализация навигации
   const API_BASE_URL = 'http://localhost:8001';
   const navigate = useNavigate();
-  
+
   // Настройка axios с токеном авторизации
   const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
@@ -179,24 +179,24 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
     try {
       // Запрос к API для получения всех заказов
       const ordersResponse = await axiosInstance.get('/orders');
-      
+
       if (Array.isArray(ordersResponse.data)) {
         const ordersData = ordersResponse.data;
-        
+
         // Получаем платежи для обогащения заказов информацией о платежах
         await fetchPayments();
-        
+
         // Обогащаем данные заказов информацией о платежах
         const enrichedOrders = ordersData.map((order: Order) => {
           // Находим платежи для этого заказа
           const orderPayments = payments.filter(p => p.order_id === order.id);
-          
+
           // Получаем последний платеж
-          const latestPayment = orderPayments.length ? 
-            orderPayments.sort((a, b) => 
+          const latestPayment = orderPayments.length ?
+            orderPayments.sort((a, b) =>
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             )[0] : null;
-          
+
           // Обработка order_items, если они представлены строкой
           let orderItems = order.order_items;
           if (typeof orderItems === 'string') {
@@ -207,7 +207,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               orderItems = [];
             }
           }
-          
+
           // Добавляем информацию о платеже в заказ
           return {
             ...order,
@@ -216,23 +216,23 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             transaction_id: latestPayment?.transaction_id
           };
         });
-        
+
         setOrders(enrichedOrders);
-        
+
         // Рассчитываем статистику
         const stats: {[key: string]: number} = {};
         const payStats: {[key: string]: number} = {};
-        
+
         enrichedOrders.forEach((order: Order) => {
           stats[order.status] = (stats[order.status] || 0) + 1;
           if (order.payment_status) {
             payStats[order.payment_status] = (payStats[order.payment_status] || 0) + 1;
           }
         });
-        
+
         setStatistics(stats);
         setPaymentStatistics(payStats);
-        
+
         // Автоматически обновляем статусы и назначаем курьеров
         autoUpdateOrderStatuses(enrichedOrders);
       }
@@ -246,14 +246,14 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setLoading(false);
     }
   }, [payments]);
-  
+
   // Получение платежей из базы данных через API
   const fetchPayments = useCallback(async () => {
     setPaymentsLoading(true);
     try {
       // Запрос к API для получения всех платежей
       const paymentsResponse = await axiosInstance.get('/payments');
-      
+
       if (Array.isArray(paymentsResponse.data)) {
         setPayments(paymentsResponse.data);
         return paymentsResponse.data;
@@ -270,33 +270,33 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setPaymentsLoading(false);
     }
   }, [axiosInstance]);
-  
+
   // Загрузка данных при монтировании компонента
   useEffect(() => {
     fetchOrders();
-    
+
     // Периодическое обновление данных
     const refreshInterval = setInterval(() => {
       fetchOrders();
     }, 300000); // каждые 5 минут
-    
+
     return () => clearInterval(refreshInterval);
   }, [fetchOrders]);
-  
+
   // Автоматическое обновление статусов заказов и назначение курьеров
   const autoUpdateOrderStatuses = async (ordersList: Order[]) => {
     try {
       for (const order of ordersList) {
         // Если заказ оплачен и ожидает обработки
         if (
-          order.payment_status === 'completed' && 
-          order.status === 'pending' && 
+          order.payment_status === 'completed' &&
+          order.status === 'pending' &&
           order.payment_method !== 'cash_on_delivery' &&
           order.payment_method !== 'cash'
         ) {
           // Обновляем статус заказа на "processing"
           await updateOrderStatus(order.id, 'processing');
-          
+
           // Если у заказа нет назначенного курьера, назначаем автоматически
           if (!order.courier_name) {
             await autoAssignCourier(order.id);
@@ -307,34 +307,34 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       console.error('Ошибка при автообновлении статусов:', error);
     }
   };
-  
+
   // Автоматическое назначение курьера
   const autoAssignCourier = async (orderId: number) => {
     try {
       // Выбираем случайного курьера из списка
       const randomIndex = Math.floor(Math.random() * availableCouriers.length);
       const assignedCourier = availableCouriers[randomIndex];
-      
+
       // Текущая дата + 3 дня для предполагаемой даты доставки
       const estimatedDeliveryDate = dayjs().add(3, 'day').format('YYYY-MM-DD');
-      
+
       // Обновляем заказ через API
       await axiosInstance.patch(`/orders/${orderId}`, {
         courier_name: assignedCourier,
         estimated_delivery: estimatedDeliveryDate
       });
-      
+
       // Обновляем локальное состояние
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId ? { 
-            ...order, 
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? {
+            ...order,
             courier_name: assignedCourier,
-            estimated_delivery: estimatedDeliveryDate 
+            estimated_delivery: estimatedDeliveryDate
           } : order
         )
       );
-      
+
       notification.success({
         message: 'Курьер назначен автоматически',
         description: `Заказу №${orderId} автоматически назначен курьер: ${assignedCourier}`
@@ -347,35 +347,35 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       });
     }
   };
-  
+
   // Обновление статуса заказа
   const updateOrderStatus = async (id: number, status: string) => {
     try {
       // Обновляем заказ через API
       const updateData: any = { status };
-      
+
       // Если статус - доставлен, добавляем фактическую дату доставки
       if (status === 'delivered') {
         updateData.actual_delivery = dayjs().format('YYYY-MM-DD HH:mm:ss');
       }
-      
+
       // Также обновляем статус доставки, чтобы они были синхронизированы
       updateData.delivery_status = status;
-      
+
       await axiosInstance.patch(`/orders/${id}`, updateData);
-      
+
       // Обновляем локальное состояние
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === id ? { 
-            ...order, 
-            status, 
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === id ? {
+            ...order,
+            status,
             delivery_status: status,
             ...(status === 'delivered' ? { actual_delivery: dayjs().format('YYYY-MM-DD HH:mm:ss') } : {})
           } : order
         )
       );
-      
+
       notification.success({
         message: 'Статус обновлен',
         description: `Статус заказа №${id} изменен на "${getStatusText(status)}"`
@@ -388,7 +388,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       });
     }
   };
-  
+
   // Подтверждение оплаты заказа
   const confirmOrderPayment = async (id: number) => {
     setConfirmingPayment(id);
@@ -400,7 +400,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
 
       // Создаем новый платеж через API
       const transactionId = `TXN${dayjs().format('YYYYMMDDHHmmss')}`;
-      
+
       const paymentData = {
         order_id: id,
         payment_method: order.payment_method,
@@ -408,29 +408,29 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         transaction_id: transactionId,
         created_at: dayjs().format('YYYY-MM-DD HH:mm:ss')
       };
-      
+
       const response = await axiosInstance.post('/payments', paymentData);
-      
+
       // Обновляем локальное состояние
       const newPayment = response.data;
       setPayments(prevPayments => [...prevPayments, newPayment]);
-      
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
+
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
           order.id === id ? { ...order, payment_status: 'completed', transaction_id: transactionId } : order
         )
       );
-      
+
       notification.success({
         message: 'Оплата подтверждена',
         description: `Оплата заказа №${id} подтверждена`
       });
-      
+
       // Если заказ в ожидании, автоматически переводим в обработку
       if (order.status === 'pending') {
         await updateOrderStatus(id, 'processing');
       }
-      
+
       // Если у заказа нет курьера, автоматически назначаем
       if (!order.courier_name) {
         await autoAssignCourier(id);
@@ -445,7 +445,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setConfirmingPayment(null);
     }
   };
-  
+
   // Синхронизация с Север-Рыбой через API
   const syncOrderWithSeverRyba = async (orderId: number) => {
     setSyncingOrder(orderId);
@@ -456,7 +456,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         sync_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
         user: CURRENT_USER
       });
-      
+
       notification.success({
         message: 'Синхронизация с Север-Рыба',
         description: `Заказ №${orderId} успешно отправлен в систему Север-Рыба`
@@ -471,7 +471,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setSyncingOrder(null);
     }
   };
-  
+
   // Экспорт заказов в Excel
   const exportOrdersToExcel = async () => {
     setExportLoading(true);
@@ -488,7 +488,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           end_date: dateRange && dateRange[1] ? dateRange[1].format('YYYY-MM-DD') : undefined
         }
       });
-      
+
       // Создаем ссылку для скачивания файла
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -497,7 +497,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      
+
       notification.success({
         message: 'Экспорт выполнен',
         description: 'Данные заказов успешно экспортированы'
@@ -512,43 +512,43 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setExportLoading(false);
     }
   };
-  
+
   // Отправка формы редактирования заказа
   const handleEditSubmit = async (values: any) => {
     if (!orderDetails) return;
-    
+
     try {
       // Подготавливаем данные для API
       const updateData = { ...values };
-      
+
       // Преобразуем моменты в строки
       if (values.estimated_delivery && dayjs.isDayjs(values.estimated_delivery)) {
         updateData.estimated_delivery = values.estimated_delivery.format('YYYY-MM-DD');
       }
-      
+
       if (values.actual_delivery && dayjs.isDayjs(values.actual_delivery)) {
         updateData.actual_delivery = values.actual_delivery.format('YYYY-MM-DD HH:mm:ss');
       }
-      
+
       // Отправляем обновления на сервер
       await axiosInstance.patch(`/orders/${orderDetails.id}`, updateData);
-      
+
       // Обновляем локальное состояние
       const updatedOrder = { ...orderDetails, ...updateData };
-      
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
+
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
           order.id === orderDetails.id ? updatedOrder : order
         )
       );
-      
+
       setOrderDetails(updatedOrder);
-      
+
       notification.success({
         message: 'Заказ обновлен',
         description: `Заказ №${orderDetails.id} успешно обновлен`
       });
-      
+
       setEditVisible(false);
     } catch (error) {
       console.error('Ошибка при обновлении заказа:', error);
@@ -558,12 +558,12 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       });
     }
   };
-  
+
   // Создание нового платежа
   const handleCreatePayment = async (values: any) => {
     try {
       const transactionId = values.transaction_id || `TXN${dayjs().format('YYYYMMDDHHmmss')}`;
-      
+
       // Создаем новый платеж через API
       const paymentData = {
         order_id: values.order_id,
@@ -572,45 +572,45 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         transaction_id: transactionId,
         created_at: dayjs().format('YYYY-MM-DD HH:mm:ss')
       };
-      
+
       const response = await axiosInstance.post('/payments', paymentData);
-      
+
       // Получаем новый платеж из ответа
       const newPayment = response.data;
-      
+
       // Обновляем список платежей
       setPayments(prevPayments => [...prevPayments, newPayment]);
-      
+
       // Обновляем статус платежа в заказе, если он завершен
       if (values.payment_status === 'completed') {
-        const updatedOrders = orders.map(o => 
-          o.id === values.order_id ? { 
-            ...o, 
+        const updatedOrders = orders.map(o =>
+          o.id === values.order_id ? {
+            ...o,
             payment_status: 'completed',
             transaction_id: transactionId
           } : o
         );
-        
+
         setOrders(updatedOrders);
-        
+
         // Запускаем автоматизацию для этого заказа
         const order = updatedOrders.find(o => o.id === values.order_id);
-        
+
         if (order && order.status === 'pending') {
           await updateOrderStatus(values.order_id, 'processing');
         }
-        
+
         // Если у заказа нет курьера, автоматически назначаем
         if (order && !order.courier_name) {
           await autoAssignCourier(values.order_id);
         }
       }
-      
+
       notification.success({
         message: 'Платеж добавлен',
         description: `Новый платеж для заказа №${values.order_id} успешно создан`
       });
-      
+
       paymentForm.resetFields();
       setPaymentModalVisible(false);
     } catch (error) {
@@ -621,22 +621,22 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       });
     }
   };
-  
+
   // Печать заказа
   const printOrder = async (orderId: number) => {
     setPrintLoading(true);
-    
+
     try {
       // Получаем детали заказа через API
       const orderResponse = await axiosInstance.get(`/orders/${orderId}`);
       const order = orderResponse.data;
-      
+
       // Получаем платежи для этого заказа
       const paymentsResponse = await axiosInstance.get(`/payments`, {
         params: { order_id: orderId }
       });
       const orderPayments = paymentsResponse.data || [];
-      
+
       // Создаем новое окно для печати
       const printWindow = window.open('', '_blank');
       if (!printWindow) {
@@ -646,7 +646,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         });
         return;
       }
-      
+
       // Обработка order_items, если они представлены строкой
       let orderItems = order.order_items;
       if (typeof orderItems === 'string') {
@@ -657,7 +657,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           orderItems = [];
         }
       }
-      
+
       // Подготавливаем данные товаров для печати
       const itemsHtml = orderItems.map((item: OrderItem) => `
         <tr>
@@ -668,7 +668,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${formatPrice(item.price * item.quantity)}</td>
         </tr>
       `).join('');
-      
+
       // Подготавливаем данные платежей для печати
       const paymentsHtml = orderPayments.map((payment: Payment) => `
         <tr>
@@ -679,7 +679,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           <td style="padding: 8px; border: 1px solid #ddd;">${formatDate(payment.created_at)}</td>
         </tr>
       `).join('');
-      
+
       // HTML для печати
       printWindow.document.write(`
         <!DOCTYPE html>
@@ -790,7 +790,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         </body>
         </html>
       `);
-      
+
       printWindow.document.close();
     } catch (error) {
       console.error('Ошибка при печати заказа:', error);
@@ -802,11 +802,11 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       setPrintLoading(false);
     }
   };
-  
+
   // Открытие формы редактирования
   const showEditForm = (order: Order) => {
     setOrderDetails(order);
-    
+
     // Устанавливаем начальные значения формы
     editForm.setFieldsValue({
       status: order.status,
@@ -820,57 +820,57 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       actual_delivery: order.actual_delivery ? dayjs(order.actual_delivery) : null,
       delivery_status: order.delivery_status || order.status
     });
-    
+
     setEditVisible(true);
   };
-  
+
   // Фильтрация заказов
   const filterOrders = useMemo(() => {
     return orders.filter(order => {
       let match = true;
-      
+
       // Фильтр по поиску
       if (searchText) {
         const lowerSearchText = searchText.toLowerCase();
-        const searchMatch = 
+        const searchMatch =
           order.id.toString().includes(lowerSearchText) ||
           (order.client_name && order.client_name.toLowerCase().includes(lowerSearchText)) ||
           (order.tracking_number && order.tracking_number.toLowerCase().includes(lowerSearchText)) ||
           (order.delivery_address && order.delivery_address.toLowerCase().includes(lowerSearchText));
-        
+
         if (!searchMatch) match = false;
       }
-      
+
       // Фильтр по статусу заказа
       if (statusFilter && order.status !== statusFilter) {
         match = false;
       }
-      
+
       // Фильтр по статусу оплаты
       if (paymentStatusFilter && order.payment_status !== paymentStatusFilter) {
         match = false;
       }
-      
+
       // Фильтр по датам
       if (dateRange && dateRange[0] && dateRange[1]) {
         const orderDate = dayjs(order.created_at);
         const startDate = dateRange[0].startOf('day');
         const endDate = dateRange[1].endOf('day');
-        
+
         if (!orderDate.isBetween(startDate, endDate, null, '[]')) {
           match = false;
         }
       }
-      
+
       return match;
     });
   }, [orders, searchText, statusFilter, paymentStatusFilter, dateRange]);
-  
+
   // Переход на страницу доставки
   const goToDelivery = (orderId: number) => {
     navigate(`/delivery/${orderId}`);
   };
-  
+
   // Вспомогательные функции
   const formatPrice = (price: number): string => {
     return new Intl.NumberFormat('ru-RU', {
@@ -921,7 +921,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
     };
     return methodMap[method] || method;
   };
-  
+
   // Очистка фильтров
   const clearFilters = () => {
     setSearchText('');
@@ -929,7 +929,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
     setPaymentStatusFilter(null);
     setDateRange(null);
   };
-  
+
   // Колонки для таблицы
   const columns = [
     {
@@ -1011,9 +1011,9 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>{getPaymentMethodText(record.payment_method)}</Text>
           <Tag color={
-            record.payment_status === 'completed' ? 'green' : 
+            record.payment_status === 'completed' ? 'green' :
             record.payment_status === 'processing' ? 'blue' :
-            record.payment_status === 'pending' ? 'orange' : 
+            record.payment_status === 'pending' ? 'orange' :
             record.payment_status === 'failed' ? 'red' : 'default'
           }>
             {getPaymentStatusText(record.payment_status || 'pending')}
@@ -1064,9 +1064,9 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       render: (text: string, record: Order) => (
         <Space size={4} className="action-buttons">
           <Tooltip title="Просмотр деталей">
-            <Button 
-              type="text" 
-              icon={<EyeOutlined />} 
+            <Button
+              type="text"
+              icon={<EyeOutlined />}
               className="action-button"
               onClick={() => {
                 setOrderDetails(record);
@@ -1075,16 +1075,16 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             />
           </Tooltip>
           <Tooltip title="Редактировать">
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<EditOutlined />}
               className="action-button"
               onClick={() => showEditForm(record)}
             />
           </Tooltip>
           <Tooltip title="Печать заказа">
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<PrinterOutlined />}
               className="action-button"
               onClick={() => printOrder(record.id)}
@@ -1092,8 +1092,8 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             />
           </Tooltip>
           <Tooltip title="Управление доставкой">
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<SendOutlined />}
               className="action-button"
               onClick={() => goToDelivery(record.id)}
@@ -1108,8 +1108,8 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 okText="Да"
                 cancelText="Нет"
               >
-                <Button 
-                  type="text" 
+                <Button
+                  type="text"
                   icon={<DollarOutlined />}
                   className="action-button"
                   loading={confirmingPayment === record.id}
@@ -1118,8 +1118,8 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             </Tooltip>
           )}
           <Tooltip title="Синхронизировать с Север-Рыба">
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<SyncOutlined spin={syncingOrder === record.id} />}
               className="action-button"
               onClick={() => syncOrderWithSeverRyba(record.id)}
@@ -1138,14 +1138,14 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
     </svg>
   );
-  
+
   const ClockIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10"></circle>
       <polyline points="12 6 12 12 16 14"></polyline>
     </svg>
   );
-  
+
   const SyncIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 2v6h-6"></path>
@@ -1154,7 +1154,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
     </svg>
   );
-  
+
   const DeliveryIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="1" y="3" width="15" height="13"></rect>
@@ -1163,26 +1163,26 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       <circle cx="18.5" cy="18.5" r="2.5"></circle>
     </svg>
   );
-  
+
   const CheckIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
       <polyline points="22 4 12 14.01 9 11.01"></polyline>
     </svg>
   );
-  
+
   const PaymentIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
       <line x1="2" y1="10" x2="22" y2="10"></line>
     </svg>
   );
-  
+
   // Компонент статистики
-  const Statistic: React.FC<{ title: string; value: number; prefix?: React.ReactNode }> = ({ 
-    title, 
-    value, 
-    prefix 
+  const Statistic: React.FC<{ title: string; value: number; prefix?: React.ReactNode }> = ({
+    title,
+    value,
+    prefix
   }) => {
     return (
       <div className="statistic-container">
@@ -1194,7 +1194,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
       </div>
     );
   };
-  
+
   // Рендер компонента
   return (
     <div className="orders-page">
@@ -1205,18 +1205,18 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           {`${dayjs().format('DD MMMM YYYY')} | ${orders.length} заказов в базе данных`}
         </Text>
       </div>
-      
+
       {/* Информационная панель */}
       <Card style={{ marginBottom: '16px' }} type="inner">
         <Space>
           <CheckCircleOutlined style={{ color: '#52c41a' }} />
           <Text strong>
-            Сейчас: {CURRENT_DATE}, Пользователь: {CURRENT_USER}. 
+            Сейчас: {CURRENT_DATE}, Пользователь: {CURRENT_USER}.
             Полуавтоматический режим активен. При оплате заказа автоматически назначается курьер и обновляется статус заказа.
           </Text>
         </Space>
       </Card>
-      
+
       {/* Карточки статистики */}
       <div className="stats-row">
         <Card size="small" className="stat-card stat-card-all">
@@ -1262,7 +1262,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           />
         </Card>
       </div>
-      
+
       {/* Панель фильтров */}
       <Card className="filters-card">
         <Row gutter={[16, 16]} align="middle">
@@ -1345,7 +1345,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           </Col>
         </Row>
       </Card>
-      
+
       {/* Таблица заказов */}
       <Card className="orders-table-card">
         {loading ? (
@@ -1372,7 +1372,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           />
         )}
       </Card>
-      
+
       {/* Модальное окно деталей заказа */}
       <Drawer
         title={`Заказ #${orderDetails?.id || ''}`}
@@ -1382,8 +1382,8 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         footer={
           <Space>
             <Button onClick={() => setDetailsVisible(false)}>Закрыть</Button>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               onClick={() => {
                 setDetailsVisible(false);
                 if (orderDetails) showEditForm(orderDetails);
@@ -1391,7 +1391,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             >
               Редактировать
             </Button>
-            <Button 
+            <Button
               onClick={() => orderDetails && printOrder(orderDetails.id)}
               icon={<PrinterOutlined />}
               disabled={printLoading}
@@ -1411,7 +1411,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Row gutter={[16, 8]}>
                 <Col span={12}><Text strong>Дата создания:</Text></Col>
                 <Col span={12}>{formatDate(orderDetails.created_at)}</Col>
-                
+
                 <Col span={12}><Text strong>Статус заказа:</Text></Col>
                 <Col span={12}>
                   <Tag color={
@@ -1424,26 +1424,26 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                     {getStatusText(orderDetails.status)}
                   </Tag>
                 </Col>
-                
+
                 <Col span={12}><Text strong>Общая сумма:</Text></Col>
                 <Col span={12}><Text>{formatPrice(orderDetails.total_price)}</Text></Col>
-                
+
                 <Col span={12}><Text strong>Метод оплаты:</Text></Col>
                 <Col span={12}>{getPaymentMethodText(orderDetails.payment_method) || 'Не указан'}</Col>
-                
+
                 <Col span={12}><Text strong>Статус оплаты:</Text></Col>
                 <Col span={12}>
                   <Tag color={
-                    orderDetails.payment_status === 'completed' ? 'green' : 
+                    orderDetails.payment_status === 'completed' ? 'green' :
                     orderDetails.payment_status === 'processing' ? 'blue' :
-                    orderDetails.payment_status === 'pending' ? 'orange' : 
+                    orderDetails.payment_status === 'pending' ? 'orange' :
                     orderDetails.payment_status === 'failed' ? 'red' : 'default'
                   }>
                     {getPaymentStatusText(orderDetails.payment_status || 'pending')}
                   </Tag>
                   {orderDetails.payment_status !== 'completed' && (
-                    <Button 
-                      type="link" 
+                    <Button
+                      type="link"
                       size="small"
                       onClick={() => confirmOrderPayment(orderDetails.id)}
                       loading={confirmingPayment === orderDetails.id}
@@ -1452,7 +1452,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                     </Button>
                   )}
                 </Col>
-                
+
                 {orderDetails.transaction_id && (
                   <>
                     <Col span={12}><Text strong>ID транзакции:</Text></Col>
@@ -1461,7 +1461,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 )}
               </Row>
             </div>
-            
+
             <div className="detail-section">
               <div className="section-header">
                 <h3>Информация о клиенте</h3>
@@ -1469,13 +1469,13 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Row gutter={[16, 8]}>
                 <Col span={12}><Text strong>ID пользователя:</Text></Col>
                 <Col span={12}>{orderDetails.user_id}</Col>
-                
+
                 <Col span={12}><Text strong>Имя клиента:</Text></Col>
                 <Col span={12}>{orderDetails.client_name || 'Не указан'}</Col>
-                
+
                 <Col span={12}><Text strong>Телефон:</Text></Col>
                 <Col span={12}>{orderDetails.contact_phone || orderDetails.phone || 'Не указан'}</Col>
-                
+
                 {orderDetails.email && (
                   <>
                     <Col span={12}><Text strong>Email:</Text></Col>
@@ -1484,14 +1484,14 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 )}
               </Row>
             </div>
-            
+
             <div className="detail-section">
               <div className="section-header">
                 <h3>Адрес доставки</h3>
               </div>
               <p>{orderDetails.delivery_address || 'Не указан'}</p>
             </div>
-            
+
             <div className="detail-section">
               <div className="section-header">
                 <h3>Товары в заказе</h3>
@@ -1534,16 +1534,16 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 )}
               />
             </div>
-            
+
             <div className="detail-section">
               <div className="section-header">
                 <h3>Платежи</h3>
-                <Button 
-                  type="link" 
+                <Button
+                  type="link"
                   size="small"
                   icon={<PlusOutlined />}
                   onClick={() => {
-                    paymentForm.setFieldsValue({ 
+                    paymentForm.setFieldsValue({
                       order_id: orderDetails.id,
                       payment_method: orderDetails.payment_method,
                       payment_status: 'completed'
@@ -1575,9 +1575,9 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                     dataIndex: 'payment_status',
                     render: (status) => (
                       <Tag color={
-                        status === 'completed' ? 'green' : 
+                        status === 'completed' ? 'green' :
                         status === 'processing' ? 'blue' :
-                        status === 'pending' ? 'orange' : 
+                        status === 'pending' ? 'orange' :
                         status === 'failed' ? 'red' : 'default'
                       }>
                         {getPaymentStatusText(status)}
@@ -1595,7 +1595,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 }}
               />
             </div>
-            
+
             <div className="detail-section">
               <div className="section-header">
                 <h3>Информация о доставке</h3>
@@ -1605,39 +1605,39 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                 <Col span={12}>
                   {orderDetails.courier_name || 'Не назначен'}
                   {!orderDetails.courier_name && orderDetails.payment_status === 'completed' && (
-                    <Button 
-                      type="link" 
+                    <Button
+                      type="link"
                       size="small"
                       onClick={async () => {
                         try {
                           // Выбираем случайного курьера из списка
                           const randomIndex = Math.floor(Math.random() * availableCouriers.length);
                           const assignedCourier = availableCouriers[randomIndex];
-                          
+
                           // Текущая дата + 3 дня для предполагаемой даты доставки
                           const estimatedDeliveryDate = dayjs().add(3, 'day').format('YYYY-MM-DD');
-                          
+
                           // Обновляем заказ через API
                           await axiosInstance.patch(`/orders/${orderDetails.id}`, {
                             courier_name: assignedCourier,
                             estimated_delivery: estimatedDeliveryDate
                           });
-                          
-                          const updatedOrder = { 
-                            ...orderDetails, 
+
+                          const updatedOrder = {
+                            ...orderDetails,
                             courier_name: assignedCourier,
                             estimated_delivery: estimatedDeliveryDate
                           };
-                          
+
                           setOrderDetails(updatedOrder);
-                          
+
                           // Обновляем в основном списке
-                          const updatedOrders = orders.map(o => 
+                          const updatedOrders = orders.map(o =>
                             o.id === orderDetails.id ? updatedOrder : o
                           );
-                          
+
                           setOrders(updatedOrders);
-                          
+
                           notification.success({
                             message: 'Курьер назначен',
                             description: `Курьер ${assignedCourier} назначен для заказа №${orderDetails.id}`
@@ -1655,10 +1655,10 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                     </Button>
                   )}
                 </Col>
-                
+
                 <Col span={12}><Text strong>Номер отслеживания:</Text></Col>
                 <Col span={12}>{orderDetails.tracking_number || 'Не указан'}</Col>
-                
+
                 <Col span={12}><Text strong>Статус доставки:</Text></Col>
                 <Col span={12}>
                   {orderDetails.delivery_status ? (
@@ -1673,13 +1673,13 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
                     'Не указан'
                   )}
                 </Col>
-                
+
                 <Col span={12}><Text strong>Планируемая доставка:</Text></Col>
                 <Col span={12}>{orderDetails.estimated_delivery ? formatDate(orderDetails.estimated_delivery) : 'Не указана'}</Col>
-                
+
                 <Col span={12}><Text strong>Фактическая доставка:</Text></Col>
                 <Col span={12}>{orderDetails.actual_delivery ? formatDate(orderDetails.actual_delivery) : 'Не выполнена'}</Col>
-                
+
                 <Col span={24}><Text strong>Примечания к доставке:</Text></Col>
                 <Col span={24}>
                   <div className="notes-box">
@@ -1691,7 +1691,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           </div>
         )}
       </Drawer>
-      
+
       {/* Форма редактирования заказа */}
       <Drawer
         title={`Редактирование заказа #${orderDetails?.id || ''}`}
@@ -1701,8 +1701,8 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         footer={
           <Space>
             <Button onClick={() => setEditVisible(false)}>Отмена</Button>
-            <Button 
-              type="primary" 
+            <Button
+              type="primary"
               onClick={() => editForm.submit()}
             >
               Сохранить
@@ -1729,7 +1729,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Option value="cancelled">Отменен</Option>
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="client_name"
             label="Имя клиента"
@@ -1737,14 +1737,14 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           >
             <Input />
           </Form.Item>
-          
+
           <Form.Item
             name="contact_phone"
             label="Телефон клиента"
           >
             <Input placeholder="+7 (___) ___-__-__" />
           </Form.Item>
-          
+
           <Form.Item
             name="delivery_address"
             label="Адрес доставки"
@@ -1752,7 +1752,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           >
             <TextArea rows={2} />
           </Form.Item>
-          
+
           <Form.Item
             name="courier_name"
             label="Курьер"
@@ -1763,37 +1763,37 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               ))}
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="tracking_number"
             label="Номер отслеживания"
           >
             <Input />
           </Form.Item>
-          
+
           <Form.Item
             name="estimated_delivery"
             label="Планируемая дата доставки"
           >
-            <DatePicker 
-              format="DD.MM.YYYY" 
+            <DatePicker
+              format="DD.MM.YYYY"
               locale={locale}
               style={{ width: '100%' }}
             />
           </Form.Item>
-          
+
           <Form.Item
             name="actual_delivery"
             label="Фактическая дата доставки"
           >
-            <DatePicker 
+            <DatePicker
               format="DD.MM.YYYY HH:mm"
               showTime
               locale={locale}
               style={{ width: '100%' }}
             />
           </Form.Item>
-          
+
           <Form.Item
             name="delivery_status"
             label="Статус доставки"
@@ -1807,7 +1807,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Option value="cancelled">Отменен</Option>
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="delivery_notes"
             label="Примечания к доставке"
@@ -1816,7 +1816,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
           </Form.Item>
         </Form>
       </Drawer>
-      
+
       {/* Модальное окно для создания платежа */}
       <Modal
         title="Создание платежа"
@@ -1834,10 +1834,10 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
             label="ID заказа"
             rules={[{ required: true, message: 'Выберите заказ' }]}
           >
-            <Select 
-              allowClear 
+            <Select
+              allowClear
               showSearch
-              filterOption={(input, option) => 
+              filterOption={(input, option) =>
                 option?.children?.toString().toLowerCase().indexOf(input.toLowerCase()) >= 0
               }
             >
@@ -1848,7 +1848,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               ))}
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="payment_method"
             label="Способ оплаты"
@@ -1864,7 +1864,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Option value="credit_card">Кредитной картой</Option>
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="payment_status"
             label="Статус платежа"
@@ -1876,14 +1876,14 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
               <Option value="pending">Ожидает</Option>
             </Select>
           </Form.Item>
-          
+
           <Form.Item
             name="transaction_id"
             label="ID транзакции"
           >
             <Input placeholder="Например: TXN2025050800XX" />
           </Form.Item>
-          
+
           <Form.Item>
             <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button onClick={() => setPaymentModalVisible(false)}>

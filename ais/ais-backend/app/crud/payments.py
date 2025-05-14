@@ -1,6 +1,5 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import json
 import traceback
 from datetime import datetime
 
@@ -14,8 +13,8 @@ def get_payments(db: Session):
         logger.info("Запрос на получение всех платежей")
 
         query = text("""
-        SELECT p.id, p.order_id, p.amount, p.transaction_id, p.payment_method, 
-               p.status, p.created_at, p.updated_at, p.payment_details,
+        SELECT p.id, p.order_id, p.payment_method, p.payment_status, 
+               p.transaction_id, p.created_at,
                o.client_name, o.user_id, o.status as order_status
         FROM payments p
         LEFT JOIN orders o ON p.order_id = o.id
@@ -34,13 +33,10 @@ def get_payments(db: Session):
             payment_dict = {
                 "id": row.id,
                 "order_id": row.order_id,
-                "amount": float(row.amount or 0),
-                "transaction_id": row.transaction_id,
                 "payment_method": row.payment_method,
-                "status": row.status.strip() if row.status else "pending",
+                "payment_status": row.payment_status.strip() if row.payment_status else "pending",
+                "transaction_id": row.transaction_id,
                 "created_at": row.created_at or datetime.now(),
-                "updated_at": row.updated_at,
-                "payment_details": row.payment_details,
                 # Добавляем информацию о заказе для удобства
                 "client_name": row.client_name,
                 "user_id": row.user_id,
@@ -62,8 +58,8 @@ def get_payment(payment_id: int, db: Session):
         logger.info(f"Запрос на получение платежа с ID {payment_id}")
 
         query = text("""
-        SELECT p.id, p.order_id, p.amount, p.transaction_id, p.payment_method, 
-               p.status, p.created_at, p.updated_at, p.payment_details,
+        SELECT p.id, p.order_id, p.payment_method, p.payment_status, 
+               p.transaction_id, p.created_at,
                o.client_name, o.user_id, o.status as order_status
         FROM payments p
         LEFT JOIN orders o ON p.order_id = o.id
@@ -80,13 +76,10 @@ def get_payment(payment_id: int, db: Session):
         payment_dict = {
             "id": payment_row.id,
             "order_id": payment_row.order_id,
-            "amount": float(payment_row.amount or 0),
-            "transaction_id": payment_row.transaction_id,
             "payment_method": payment_row.payment_method,
-            "status": payment_row.status.strip() if payment_row.status else "pending",
+            "payment_status": payment_row.payment_status.strip() if payment_row.payment_status else "pending",
+            "transaction_id": payment_row.transaction_id,
             "created_at": payment_row.created_at or datetime.now(),
-            "updated_at": payment_row.updated_at,
-            "payment_details": payment_row.payment_details,
             # Добавляем информацию о заказе для удобства
             "client_name": payment_row.client_name,
             "user_id": payment_row.user_id,
@@ -107,8 +100,8 @@ def get_order_payments(order_id: int, db: Session):
         logger.info(f"Запрос на получение платежей для заказа с ID {order_id}")
 
         query = text("""
-        SELECT p.id, p.order_id, p.amount, p.transaction_id, p.payment_method, 
-               p.status, p.created_at, p.updated_at, p.payment_details
+        SELECT p.id, p.order_id, p.payment_method, p.payment_status, 
+               p.transaction_id, p.created_at
         FROM payments p
         WHERE p.order_id = :order_id
         ORDER BY p.created_at DESC
@@ -125,13 +118,10 @@ def get_order_payments(order_id: int, db: Session):
             payment_dict = {
                 "id": row.id,
                 "order_id": row.order_id,
-                "amount": float(row.amount or 0),
-                "transaction_id": row.transaction_id,
                 "payment_method": row.payment_method,
-                "status": row.status.strip() if row.status else "pending",
-                "created_at": row.created_at or datetime.now(),
-                "updated_at": row.updated_at,
-                "payment_details": row.payment_details
+                "payment_status": row.payment_status.strip() if row.payment_status else "pending",
+                "transaction_id": row.transaction_id,
+                "created_at": row.created_at or datetime.now()
             }
             payments.append(payment_dict)
 
@@ -159,19 +149,17 @@ def create_payment(payment_data: PaymentCreate, db: Session):
         # Создаем платеж
         insert_query = text("""
         INSERT INTO payments (
-            order_id, amount, transaction_id, payment_method, status, created_at, payment_details
+            order_id, payment_method, payment_status, transaction_id, created_at
         ) VALUES (
-            :order_id, :amount, :transaction_id, :payment_method, :status, CURRENT_TIMESTAMP, :payment_details
+            :order_id, :payment_method, :payment_status, :transaction_id, CURRENT_TIMESTAMP
         ) RETURNING id, created_at
         """)
 
         result = db.execute(insert_query, {
             "order_id": payment_data.order_id,
-            "amount": payment_data.amount,
-            "transaction_id": payment_data.transaction_id,
             "payment_method": payment_data.payment_method,
-            "status": payment_data.status,
-            "payment_details": payment_data.payment_details
+            "payment_status": payment_data.payment_status,
+            "transaction_id": payment_data.transaction_id
         }).fetchone()
 
         if not result:
@@ -183,12 +171,10 @@ def create_payment(payment_data: PaymentCreate, db: Session):
         return {
             "id": result.id,
             "order_id": payment_data.order_id,
-            "amount": payment_data.amount,
-            "transaction_id": payment_data.transaction_id,
             "payment_method": payment_data.payment_method,
-            "status": payment_data.status,
-            "created_at": result.created_at,
-            "payment_details": payment_data.payment_details
+            "payment_status": payment_data.payment_status,
+            "transaction_id": payment_data.transaction_id,
+            "created_at": result.created_at
         }
 
     except Exception as e:
@@ -214,23 +200,16 @@ def update_payment(payment_id: int, payment_data: PaymentUpdate, db: Session):
         params = {"payment_id": payment_id}
 
         # Обрабатываем все поля, которые могут быть обновлены
-        if payment_data.status is not None:
-            update_fields.append("status = :status")
-            params["status"] = payment_data.status
+        if payment_data.payment_status is not None:
+            update_fields.append("payment_status = :payment_status")
+            params["payment_status"] = payment_data.payment_status
 
         if payment_data.transaction_id is not None:
             update_fields.append("transaction_id = :transaction_id")
             params["transaction_id"] = payment_data.transaction_id
 
-        if payment_data.payment_details is not None:
-            update_fields.append("payment_details = :payment_details")
-            params["payment_details"] = payment_data.payment_details
-
-        # Всегда обновляем поле updated_at
-        update_fields.append("updated_at = CURRENT_TIMESTAMP")
-
-        # Если нет полей для обновления (кроме updated_at), просто возвращаем текущий платеж
-        if len(update_fields) <= 1:
+        # Если нет полей для обновления, просто возвращаем текущий платеж
+        if len(update_fields) == 0:
             logger.info(f"Нет данных для обновления платежа {payment_id}")
             return get_payment(payment_id, db)
 

@@ -1,11 +1,19 @@
 // warehouse/interfaces.ts
 
+export const SHIPMENT_STATUSES = {
+  PLANNED: 'PLANNED',
+  IN_TRANSIT: 'IN_TRANSIT',
+  RECEIVED: 'RECEIVED',
+  PROCESSED: 'PROCESSED',
+  CANCELLED: 'CANCELLED'
+};
+
 export interface Product {
-  id: string;
+  id: number;
   sku: string; // Артикул/код товара
   name: string;
   description?: string;
-  category_id: string;
+  category_id: number;
   category_name: string; // Название категории для отображения
   unit: string;
   price: number;
@@ -61,17 +69,18 @@ export interface StockMovement {
 }
 
 export interface Shipment {
-  id: string;
+  id?: string;
+  reference_number?: string;
   supplier: string;
+  warehouse_id?: string;
   shipment_date: string;
   expected_arrival_date?: string;
   actual_arrival_date?: string;
-  status: 'planned' | 'in-transit' | 'received' | 'processed' | 'cancelled';
-  reference_number?: string;
+  status: string;
+  notes?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
-  notes?: string;
   items: ShipmentItem[];
 }
 
