@@ -14,8 +14,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Получение URL сервисов из переменных окружения
-AIS_API = os.getenv("AIS_API", "http://localhost:8001")
-SEVER_RYBA_API = os.getenv("SEVER_RYBA_API", "http://localhost:8002")
+# Исправление: использование переменных AIS_URL и SEVER_FISH_URL из docker-compose.yml
+AIS_API = os.getenv("AIS_URL", "http://ais-backend:8001")
+SEVER_RYBA_API = os.getenv("SEVER_FISH_URL", "http://sever-fish-backend:8000")
+
+# Логирование настроек для отладки
+logger.info(f"AIS API URL: {AIS_API}")
+logger.info(f"SEVER RYBA API URL: {SEVER_RYBA_API}")
 
 app = FastAPI(
     title="NF API Gateway",
@@ -33,6 +38,9 @@ origins = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://localhost:8080",
+    # Добавляем Docker-контейнеры в список разрешенных источников
+    "http://ais-frontend:5174",
+    "http://sever-fish-frontend:5173"
 ]
 
 app.add_middleware(
@@ -58,6 +66,7 @@ async def check_services():
             }
     except Exception as e:
         services_status["ais"] = {"status": "offline", "message": str(e)}
+        logger.error(f"Ошибка при проверке AIS: {e}")
     
     # Проверка Север-Рыба
     try:
@@ -69,6 +78,7 @@ async def check_services():
             }
     except Exception as e:
         services_status["sever_ryba"] = {"status": "offline", "message": str(e)}
+        logger.error(f"Ошибка при проверке Север-Рыба: {e}")
     
     return services_status
 
@@ -90,18 +100,22 @@ async def health_check():
 # Проксирование запросов в АИС
 @app.api_route("/ais/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def ais_proxy(request: Request, path: str):
-    return await proxy_request(f"{AIS_API}/{path}", request)
+    target_url = f"{AIS_API}/{path}"
+    logger.info(f"Проксирование запроса в АИС: {request.method} {target_url}")
+    return await proxy_request(target_url, request)
 
 
 # Проксирование запросов в Север-Рыба
 @app.api_route("/sever-ryba/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def sever_ryba_proxy(request: Request, path: str):
-    return await proxy_request(f"{SEVER_RYBA_API}/{path}", request)
+    target_url = f"{SEVER_RYBA_API}/{path}"
+    logger.info(f"Проксирование запроса в Север-Рыба: {request.method} {target_url}")
+    return await proxy_request(target_url, request)
 
 
 # Универсальная функция проксирования запросов
 async def proxy_request(target_url: str, request: Request):
-    client = httpx.AsyncClient()
+    client = httpx.AsyncClient(timeout=30.0)  # Увеличиваем таймаут
     
     # Получение метода, заголовков и тела запроса
     method = request.method
@@ -112,6 +126,7 @@ async def proxy_request(target_url: str, request: Request):
     content = await request.body()
     
     try:
+        logger.info(f"Отправка запроса: {method} {target_url}")
         # Отправка запроса к целевому сервису
         response = await client.request(
             method=method,
@@ -123,6 +138,7 @@ async def proxy_request(target_url: str, request: Request):
             follow_redirects=True
         )
         
+        logger.info(f"Ответ получен: {response.status_code}")
         # Закрываем клиент после завершения запроса
         return Response(
             content=response.content,

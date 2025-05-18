@@ -46,7 +46,8 @@ import {
   getWarehouses,
   getCategories,
   getSupplies,
-  getStockMovements
+  getStockMovements,
+  getAxiosAuthConfig
 } from '../services/api';
 
 // Helper functions
@@ -61,19 +62,6 @@ const getCurrentUser = () => {
 // API key and URL for Север-Рыба
 const SEVER_RYBA_API_URL = `http://localhost:8000`;
 const SEVER_RYBA_API_KEY = localStorage.getItem('severRybaApiKey') || 'sr_api_key_2025';
-
-// Add auth header helper function since it's not exported from api.ts
-const getAxiosAuthConfig = () => {
-  const token = localStorage.getItem('token');
-  return {
-    headers: token ? {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    } : {
-      'Content-Type': 'application/json'
-    }
-  };
-};
 
 const Warehouse: React.FC = () => {
   // State for data

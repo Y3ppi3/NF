@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   Tag,
@@ -18,7 +19,7 @@ import {
   Popconfirm,
   Spin,
   Modal,
-  Tooltip
+  Tooltip,
 } from 'antd';
 import {
   SearchOutlined,
@@ -34,13 +35,20 @@ import {
   FilterOutlined,
   PlusOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/ru';
 import locale from 'antd/lib/date-picker/locale/ru_RU';
 import '../styles/Orders.css';
+import {
+  API_BASE_URL,
+  API_FULL_URL,
+  getPayments,
+  getOrders,
+  createAuthenticatedAxios,
+} from '../services/api';
+import { getAxiosAuthConfig } from '../services/api';
 
 // Устанавливаем русскую локаль для dayjs и плагины
 dayjs.locale('ru');
@@ -52,8 +60,15 @@ const { RangePicker } = DatePicker;
 const { TextArea } = Input;
 
 // Константы для работы с датами
-const CURRENT_DATE = '2025-05-08 19:36:50';
+const CURRENT_DATE = '2025-05-14 21:22:14';
 const CURRENT_USER = 'katarymba';
+
+const createAxiosInstance = () => {
+  return axios.create({
+    baseURL: API_FULL_URL,
+    ...getAxiosAuthConfig()
+  });
+};
 
 // Типы данных
 interface OrderItem {
@@ -95,6 +110,8 @@ interface Payment {
   transaction_id: string;
   created_at: string;
 }
+
+type Key = string | number;
 
 enum OrderStatus {
   PENDING = 'pending',
@@ -161,41 +178,56 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
   const [syncingOrder, setSyncingOrder] = useState<number | null>(null);
 
   // API URL и инициализация навигации
-  const API_BASE_URL = 'http://localhost:8001';
   const navigate = useNavigate();
 
   // Настройка axios с токеном авторизации
-  const axiosInstance = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  const axiosInstance = useMemo(() => {
+    return axios.create({
+      baseURL: API_FULL_URL,
+      ...getAxiosAuthConfig()
+    });
+  }, []);
 
   // Получение заказов из базы данных через API
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      // Запрос к API для получения всех заказов
-      const ordersResponse = await axiosInstance.get('/orders');
+      // Получаем заказы
+      const ordersResponse = await axiosInstance.get('/orders/');
 
       if (Array.isArray(ordersResponse.data)) {
         const ordersData = ordersResponse.data;
 
-        // Получаем платежи для обогащения заказов информацией о платежах
-        await fetchPayments();
+        // Получаем платежи напрямую здесь, без вызова fetchPayments
+        let paymentData: Payment[] = [];
+        try {
+          setPaymentsLoading(true);
+          const paymentsResponse = await axiosInstance.get('/payments');
+
+          if (Array.isArray(paymentsResponse.data)) {
+            paymentData = paymentsResponse.data;
+            setPayments(paymentData); // Обновляем состояние платежей
+          }
+        } catch (paymentError) {
+          console.error('Ошибка при получении платежей:', paymentError);
+          notification.error({
+            message: 'Ошибка при загрузке платежей',
+            description: 'Не удалось получить данные платежей из базы данных'
+          });
+        } finally {
+          setPaymentsLoading(false);
+        }
 
         // Обогащаем данные заказов информацией о платежах
         const enrichedOrders = ordersData.map((order: Order) => {
           // Находим платежи для этого заказа
-          const orderPayments = payments.filter(p => p.order_id === order.id);
+          const orderPayments = paymentData.filter(p => p.order_id === order.id);
 
           // Получаем последний платеж
           const latestPayment = orderPayments.length ?
-            orderPayments.sort((a, b) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            )[0] : null;
+              orderPayments.sort((a, b) =>
+                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )[0] : null;
 
           // Обработка order_items, если они представлены строкой
           let orderItems = order.order_items;
@@ -245,13 +277,20 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
     } finally {
       setLoading(false);
     }
-  }, [payments]);
+  }, [axiosInstance]);
+  const handleStatusFilter = (value: Key, record: Order): boolean => {
+    return record.status === value;
+  };
+
+  const handlePaymentStatusFilter = (value: Key, record: Order): boolean => {
+    return record.payment_status === value;
+  };
 
   // Получение платежей из базы данных через API
   const fetchPayments = useCallback(async () => {
     setPaymentsLoading(true);
     try {
-      // Запрос к API для получения всех платежей
+      // This will now call /api/payments
       const paymentsResponse = await axiosInstance.get('/payments');
 
       if (Array.isArray(paymentsResponse.data)) {
@@ -450,7 +489,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
   const syncOrderWithSeverRyba = async (orderId: number) => {
     setSyncingOrder(orderId);
     try {
-      // Отправляем запрос на синхронизацию
+      // Ensure we're using the API_FULL_URL path
       await axiosInstance.post(`/orders/${orderId}/sync`, {
         target_system: 'sever_ryba',
         sync_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
@@ -898,7 +937,9 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
     return statusMap[status] || status;
   };
 
-  const getPaymentStatusText = (status: string): string => {
+  const getPaymentStatusText = (status: string | undefined): string => {
+    if (!status) return 'Неизвестно';
+
     const statusMap: { [key: string]: string } = {
       'pending': 'Ожидает оплаты',
       'processing': 'Обрабатывается',
@@ -982,17 +1023,17 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         { text: 'Доставлен', value: 'delivered' },
         { text: 'Отменен', value: 'cancelled' }
       ],
-      onFilter: (value: string, record: Order) => record.status === value,
+      onFilter: handleStatusFilter,
       render: (status: string) => (
-        <Tag color={
-          status === 'pending' ? 'orange' :
-          status === 'processing' ? 'purple' :
-          status === 'shipped' || status === 'in_transit' ? 'blue' :
-          status === 'delivered' ? 'green' :
-          status === 'cancelled' ? 'red' : 'default'
-        }>
-          {getStatusText(status)}
-        </Tag>
+          <Tag color={
+            status === 'pending' ? 'orange' :
+                status === 'processing' ? 'purple' :
+                    status === 'shipped' || status === 'in_transit' ? 'blue' :
+                        status === 'delivered' ? 'green' :
+                            status === 'cancelled' ? 'red' : 'default'
+          }>
+            {getStatusText(status)}
+          </Tag>
       )
     },
     {
@@ -1006,7 +1047,7 @@ const Orders: React.FC<OrdersProps> = ({ token }) => {
         { text: 'Ошибка оплаты', value: 'failed' },
         { text: 'Возврат', value: 'refunded' }
       ],
-      onFilter: (value: string, record: Order) => record.payment_status === value,
+      onFilter: handlePaymentStatusFilter,
       render: (text: string, record: Order) => (
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>{getPaymentMethodText(record.payment_method)}</Text>
