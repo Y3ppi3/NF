@@ -279,7 +279,7 @@ alembic upgrade head
 
 ## Лицензия
 
-`MIT LICENSE`
+[MIT LICENSE](https://github.com/Y3ppi3/NorthFish/blob/main/LICENSE)
 
 ## Авторы
 
