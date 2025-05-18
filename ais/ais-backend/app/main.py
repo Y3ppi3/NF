@@ -92,8 +92,8 @@ app.include_router(category.router, tags=["Categories"])
 app.include_router(orders.router, prefix="/api", tags=["Orders"])
 app.include_router(orders.router, tags=["Orders"])
 
-# app.include_router(payments.router, prefix="/api", tags=["Payments"])
-# app.include_router(payments.router, tags=["Payments"])
+app.include_router(payments.router, prefix="/api", tags=["Payments"])
+app.include_router(payments.router, tags=["Payments"])
 
 app.include_router(warehouse.router, prefix="/api", tags=["warehouse"])
 app.include_router(warehouse.router, tags=["warehouse"])
@@ -156,8 +156,5 @@ async def shutdown_event():
     """
     Действия при остановке приложения
     """
-    from app.services.rabbitmq import rabbitmq_service
     logger.info("Остановка АИС Backend...")
-    # Закрытие соединения с RabbitMQ
-    rabbitmq_service.close()
     logger.info("АИС Backend успешно остановлен!")

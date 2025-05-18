@@ -20,7 +20,7 @@ from app.models import (
 config = context.config
 
 # Установите URL базы данных из переменных окружения или .env
-config.set_main_option('sqlalchemy.url', 'postgresql+psycopg2://katarymba:root@localhost:5432/sever_ryba_db')
+config.set_main_option('sqlalchemy.url', 'postgresql+psycopg2://northf_user:%25KM041286\)zz!@northfish-db:5432/north_fish')
 
 # Устанавливаем метаданные для миграций
 target_metadata = Base.metadata
