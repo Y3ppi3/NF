@@ -6,7 +6,7 @@
   <p><strong>Automatic Information System [AIS](Автоматическая Информационная Система)</strong></p>
   
   ![License](https://img.shields.io/badge/license-MIT-blue)
-  ![Version](https://img.shields.io/badge/version-0.0.0.4.8.3-green)
+  ![Version](https://img.shields.io/badge/version-0.0.0.4.8.4-green)
   
 </div>
 
@@ -295,7 +295,7 @@ alembic upgrade head
 
 ## 📄 Лицензия
 
-Этот проект распространяется под лицензией MIT. Подробности смотрите в файле [MIT LICENSE](https://github.com/katarymba/NF/blob/main/LICENSE)
+Этот проект распространяется под лицензией MIT. Подробности смотрите в файле [MIT LICENSE](https://github.com/Y3ppi3/NorthFish/blob/main/LICENSE)
 
 ## 👨‍💻 Авторы
 
