@@ -55,7 +55,7 @@ app.add_middleware(
 # Функция для проверки работоспособности сервисов
 async def check_services():
     services_status = {}
-    
+
     # Проверка АИС
     try:
         async with httpx.AsyncClient() as client:
@@ -67,7 +67,7 @@ async def check_services():
     except Exception as e:
         services_status["ais"] = {"status": "offline", "message": str(e)}
         logger.error(f"Ошибка при проверке AIS: {e}")
-    
+
     # Проверка Север-Рыба
     try:
         async with httpx.AsyncClient() as client:
@@ -79,7 +79,7 @@ async def check_services():
     except Exception as e:
         services_status["sever_ryba"] = {"status": "offline", "message": str(e)}
         logger.error(f"Ошибка при проверке Север-Рыба: {e}")
-    
+
     return services_status
 
 
@@ -97,59 +97,53 @@ async def health_check():
     }
 
 
-# Проксирование запросов в АИС
-@app.api_route("/ais/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def ais_proxy(request: Request, path: str):
-    target_url = f"{AIS_API}/{path}"
-    logger.info(f"Проксирование запроса в АИС: {request.method} {target_url}")
-    return await proxy_request(target_url, request)
-
-
-# Проксирование запросов в Север-Рыба
-@app.api_route("/sever-ryba/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-async def sever_ryba_proxy(request: Request, path: str):
-    target_url = f"{SEVER_RYBA_API}/{path}"
-    logger.info(f"Проксирование запроса в Север-Рыба: {request.method} {target_url}")
-    return await proxy_request(target_url, request)
-
-
 # Универсальная функция проксирования запросов
-async def proxy_request(target_url: str, request: Request):
-    client = httpx.AsyncClient(timeout=30.0)  # Увеличиваем таймаут
-    
+async def proxy_request(request: Request, path: str, target_url: str, service_name: str):
     # Получение метода, заголовков и тела запроса
     method = request.method
     headers = dict(request.headers)
-    headers.pop("host", None)  # Убираем заголовок host, чтобы не было конфликта
-    
-    # Получение тела запроса при необходимости
-    content = await request.body()
-    
+    body = await request.body()
+
+    # Не передаем заголовок host, так как он относится к API Gateway
+    if "host" in headers:
+        del headers["host"]
+
+    full_url = f"{target_url}/{path}"
+    logger.info(f"Проксирование запроса в {service_name}: {method} {full_url}")
+
     try:
-        logger.info(f"Отправка запроса: {method} {target_url}")
-        # Отправка запроса к целевому сервису
-        response = await client.request(
-            method=method,
-            url=target_url,
-            headers=headers,
-            content=content,
-            params=request.query_params,
-            cookies=request.cookies,
-            follow_redirects=True
-        )
-        
-        logger.info(f"Ответ получен: {response.status_code}")
-        # Закрываем клиент после завершения запроса
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
-            headers=dict(response.headers),
-            background=BackgroundTask(client.aclose)
-        )
-    except httpx.RequestError as exc:
-        logger.error(f"Ошибка при запросе к {target_url}: {exc}")
-        return Response(
-            content=f"Ошибка при запросе к сервису: {exc}".encode(),
-            status_code=503,
-            background=BackgroundTask(client.aclose)
-        )
+        async with httpx.AsyncClient() as client:
+            logger.info(f"Отправка запроса: {method} {full_url}")
+
+            # Передаем все параметры запроса, включая авторизационные заголовки
+            response = await client.request(
+                method=method,
+                url=full_url,
+                headers=headers,
+                content=body,
+                follow_redirects=True  # Автоматически следуем за редиректами
+            )
+
+            logger.info(f"Ответ получен: {response.status_code}")
+
+            # Создание ответа с теми же заголовками и статус-кодом
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при проксировании запроса: {e}")
+        raise HTTPException(status_code=502, detail=f"Ошибка прокси: {str(e)}")
+
+
+# Маршруты для АИС
+@app.api_route("/ais/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def ais_proxy(request: Request, path: str):
+    return await proxy_request(request, path, AIS_API, "АИС")
+
+
+# Маршруты для Север-Рыба
+@app.api_route("/sever-ryba/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def sever_ryba_proxy(request: Request, path: str):
+    return await proxy_request(request, path, SEVER_RYBA_API, "Север-Рыба")
