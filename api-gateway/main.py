@@ -38,7 +38,7 @@ origins = [
     "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://localhost:8080",
-    # Добавляем Docker-контейнеры в список разрешенных источников
+    # Docker container hosts
     "http://ais-frontend:5174",
     "http://sever-fish-frontend:5173"
 ]
