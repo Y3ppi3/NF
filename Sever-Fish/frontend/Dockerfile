@@ -1,29 +1,10 @@
-# Stage 1: Build the application
-FROM node:18-alpine as build
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Копируем только package.json
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Устанавливаем зависимости
-RUN npm install
+EXPOSE 5173
 
-# Копируем остальные файлы приложения
-COPY . .
-
-# Собираем приложение
-RUN npm run build
-
-# Stage 2: Create production image
-FROM nginx:alpine
-
-# Копируем собранное приложение из стадии сборки
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Копируем конфигурацию nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
