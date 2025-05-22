@@ -6,7 +6,7 @@
   <p><strong>Automatic Information System [AIS](Автоматическая Информационная Система)</strong></p>
   
   ![License](https://img.shields.io/badge/license-MIT-blue)
-  ![Version](https://img.shields.io/badge/version-0.0.0.4.8.4-green)
+  ![Version](https://img.shields.io/badge/version-0.0.0.4.8.5-green)
   
 </div>
 

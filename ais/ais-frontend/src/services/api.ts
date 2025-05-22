@@ -1,9 +1,12 @@
 import { getAuthToken, clearAuthToken } from './auth';
 import axios from 'axios';
 
-// Базовые URL API
+// Базовые URL API с учетом Docker окружения
 export const API_BASE_URL = '/ais';
 export const API_FULL_URL = `${API_BASE_URL}/api`;
+
+// API Gateway URL для Docker окружения
+const API_GATEWAY_URL = 'http://localhost:8080';
 
 // Создание конфигурации для разных API
 export const API_ENDPOINTS = {
@@ -109,7 +112,16 @@ export const trySeveralEndpoints = async <T>(
 
     let lastError;
 
-    for (const endpoint of endpoints) {
+    // Добавляем предпочтительные endpoints с учетом Docker
+    const dockerEndpoints = [
+        `${API_GATEWAY_URL}/ais/api/products`,
+        `${API_GATEWAY_URL}/products`
+    ];
+
+    // Объединяем все endpoint-ы для проверки
+    const allEndpoints = [...dockerEndpoints, ...endpoints];
+
+    for (const endpoint of allEndpoints) {
         try {
             console.log(`Trying to ${method} from endpoint: ${endpoint}`);
             const response = await axios({
@@ -128,7 +140,9 @@ export const trySeveralEndpoints = async <T>(
         }
     }
 
-    throw lastError || new Error('All API endpoints failed');
+    // В случае всех ошибок, возвращаем пустой массив вместо исключения
+    console.warn('All API endpoints failed, returning empty array');
+    return [] as unknown as T;
 };
 
 // Функция для работы с API с поддержкой авторизации через fetch
@@ -179,7 +193,9 @@ export const getProducts = async (categoryId?: number) => {
         `${API_BASE_URL}/products${categoryId ? `?category_id=${categoryId}` : ''}`,
         `/api/products${categoryId ? `?category_id=${categoryId}` : ''}`,
         `/products${categoryId ? `?category_id=${categoryId}` : ''}`,
-        `http://localhost:8001/api/products${categoryId ? `?category_id=${categoryId}` : ''}`
+        `http://localhost:8001/api/products${categoryId ? `?category_id=${categoryId}` : ''}`,
+        `${API_GATEWAY_URL}/ais/api/products${categoryId ? `?category_id=${categoryId}` : ''}`,
+        `${API_GATEWAY_URL}/api/products${categoryId ? `?category_id=${categoryId}` : ''}`
     ];
 
     return trySeveralEndpoints(endpoints);

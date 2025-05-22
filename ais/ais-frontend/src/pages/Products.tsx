@@ -26,7 +26,7 @@ interface Category {
 }
 
 interface ProductsProps {
-  token: string;
+  token?: string;
 }
 
 const Products: React.FC<ProductsProps> = ({ token }) => {
@@ -55,6 +55,52 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
   // Используем контекст загрузки
   const { startLoading, stopLoading } = useLoading();
 
+  // Функция для загрузки категорий
+  const fetchCategories = async () => {
+    try {
+      // Прямой запрос к API для получения категорий
+      const authToken = token || localStorage.getItem('token');
+      const response = await axios.get(`${API_BASE_URL}/api/categories`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      });
+
+      // Проверяем структуру ответа и выделяем только категории
+      let categoriesData = response.data;
+
+      // Если получены данные в нестандартном формате, пытаемся найти категории
+      if (!Array.isArray(categoriesData) || (categoriesData.length > 0 && !categoriesData[0].hasOwnProperty('name'))) {
+        console.warn('Получены данные в неправильном формате, пытаемся распознать структуру...');
+
+        // Проверяем различные форматы ответа API
+        if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
+          categoriesData = categoriesData.categories;
+        } else if (categoriesData.data && Array.isArray(categoriesData.data)) {
+          categoriesData = categoriesData.data;
+        } else if (categoriesData.results && Array.isArray(categoriesData.results)) {
+          categoriesData = categoriesData.results;
+        }
+      }
+
+      // Проверка наличия требуемых полей в категориях и фильтрация товаров
+      const validCategories = Array.isArray(categoriesData)
+          ? categoriesData.filter(item =>
+              item && typeof item === 'object' &&
+              item.hasOwnProperty('id') &&
+              item.hasOwnProperty('name') &&
+              !item.hasOwnProperty('price')) // Это признак что это категория, а не товар
+          : [];
+
+      setCategories(validCategories);
+      console.log(`Успешно загружено ${validCategories.length} категорий`);
+      return validCategories;
+    } catch (error) {
+      console.error('Ошибка при загрузке категорий:', error);
+      return [];
+    }
+  };
+
   // Загрузка товаров и категорий при монтировании
   useEffect(() => {
     // Модифицируем функцию fetchData
@@ -67,21 +113,27 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
         console.log("Начало загрузки данных для Products.tsx");
 
         try {
-          // Используем новые функции API с поддержкой нескольких URL
+          // Сначала загружаем категории
+          const categoriesData = await fetchCategories();
+
+          // Затем загружаем товары с учетом фильтра
           const productsData = await getProducts(filter || undefined);
-          const categoriesData = await getCategories();
 
-          setProducts(productsData);
-          setCategories(categoriesData);
+          // Проверка что полученные данные являются массивами
+          const productsArray = Array.isArray(productsData) ? productsData : [];
 
-          console.log(`Успешно загружено ${productsData.length} продуктов и ${categoriesData.length} категорий`);
+          setProducts(productsArray);
+          console.log(`Успешно загружено ${productsArray.length} продуктов`);
         } catch (err) {
           console.error('Ошибка при загрузке данных:', err);
+          // Установим пустые массивы в случае ошибки, чтобы избежать ошибки filter is not a function
+          setProducts([]);
           setError('Не удалось загрузить данные товаров или категорий. Пожалуйста, убедитесь, что API доступен.');
         }
 
       } catch (err) {
         console.error('Критическая ошибка при загрузке данных:', err);
+        setProducts([]);
         setError('Не удалось загрузить данные. Пожалуйста, попробуйте позже или обратитесь к администратору.');
       } finally {
         setLoading(false);
@@ -90,19 +142,23 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
     };
 
     fetchData();
-  }, [token]);
+  }, [filter]); // Добавим filter в зависимости для обновления при изменении фильтра
+
 
   // Функция для перезагрузки списка товаров
   const fetchProducts = async () => {
     try {
       startLoading();
       setLoading(true);
-      
+
       const productsData = await getProducts(filter || undefined);
-      setProducts(productsData);
+      // Проверка что полученные данные являются массивом
+      const productsArray = Array.isArray(productsData) ? productsData : [];
+      setProducts(productsArray);
       setError(null);
     } catch (err) {
       console.error('Ошибка при загрузке товаров:', err);
+      setProducts([]);
       setError('Не удалось загрузить товары. Пожалуйста, попробуйте позже.');
     } finally {
       setLoading(false);
@@ -113,7 +169,6 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
   // Обработчик изменения фильтра по категории
   const handleFilterChange = (categoryId: number | null) => {
     setFilter(categoryId);
-    fetchProducts();
   };
 
   // Функция получения имени категории по ID
@@ -137,14 +192,19 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
     if (!window.confirm('Вы уверены, что хотите удалить этот товар?')) {
       return;
     }
-    
+
     try {
       startLoading();
-      
-      await axios.delete(`${API_BASE_URL}/api/products/${productId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+
+      // Используем обратный прокси через Docker
+      const apiUrl = token
+          ? `${API_BASE_URL}/api/products/${productId}`
+          : `http://localhost:8080/ais/api/products/${productId}`;
+
+      await axios.delete(apiUrl, {
+        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
       });
-      
+
       // Обновляем список товаров после удаления
       await fetchProducts();
     } catch (err) {
@@ -157,34 +217,38 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
   // Обработчик отправки формы добавления/редактирования товара
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       startLoading();
-      
+
+      const authToken = token || localStorage.getItem('token');
+      // Используем обратный прокси через Docker
+      const baseApiUrl = `${API_BASE_URL}/api/products`;
+
       if (editingProduct) {
         // Редактирование существующего товара
         await axios.put(
-          `${API_BASE_URL}/api/products/${editingProduct.id}`,
-          newProduct,
-          { headers: { 
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}` 
-            } 
-          }
+            `${baseApiUrl}/${editingProduct.id}`,
+            newProduct,
+            { headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+              }
+            }
         );
       } else {
         // Добавление нового товара
         await axios.post(
-          `${API_BASE_URL}/api/products`,
-          newProduct,
-          { headers: { 
-              'Content-Type': 'application/json', 
-              Authorization: `Bearer ${token}` 
-            } 
-          }
+            baseApiUrl,
+            newProduct,
+            { headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+              }
+            }
         );
       }
-      
+
       // Закрываем модальное окно и обновляем список товаров
       setShowAddModal(false);
       setEditingProduct(null);
@@ -196,7 +260,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
         stock_quantity: 0,
         image_url: ''
       });
-      
+
       await fetchProducts();
     } catch (err) {
       console.error('Ошибка при сохранении товара:', err);
@@ -224,11 +288,18 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
     try {
       setIsSyncing(true);
       startLoading();
-      
-      await runFullSync();
-      
+
+      // Получаем токен из пропсов или из localStorage
+      const authToken = token || localStorage.getItem('token');
+
+      // Передаем токен в функцию runFullSync
+      await runFullSync(authToken || '');
+
       // После успешной синхронизации обновляем список товаров
       await fetchProducts();
+      // Обновляем также список категорий
+      await fetchCategories();
+
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
@@ -242,328 +313,328 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
 
   // Фильтрация товаров по поисковому запросу и категории
   const filteredProducts = products
-    .filter(product => {
-      // Фильтрация по поисковому запросу
-      if (searchTerm && !product.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
-          !product.description.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return false;
-      }
-      // Фильтрация по категории
-      if (filter !== null && product.category_id !== filter) {
-        return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      // Сортировка по выбранному полю
-      if (sortBy === 'name') {
-        return sortDirection === 'asc' 
-          ? a.name.localeCompare(b.name) 
-          : b.name.localeCompare(a.name);
-      } else if (sortBy === 'price') {
-        return sortDirection === 'asc' 
-          ? a.price - b.price 
-          : b.price - a.price;
-      } else if (sortBy === 'stock') {
-        return sortDirection === 'asc' 
-          ? a.stock_quantity - b.stock_quantity 
-          : b.stock_quantity - a.stock_quantity;
-      }
-      return 0;
-    });
+      .filter(product => {
+        // Фильтрация по поисковому запросу
+        if (searchTerm && !product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !product.description?.toLowerCase().includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+        // Фильтрация по категории
+        if (filter !== null && product.category_id !== filter) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        // Сортировка по выбранному полю
+        if (sortBy === 'name') {
+          return sortDirection === 'asc'
+              ? a.name.localeCompare(b.name)
+              : b.name.localeCompare(a.name);
+        } else if (sortBy === 'price') {
+          return sortDirection === 'asc'
+              ? a.price - b.price
+              : b.price - a.price;
+        } else if (sortBy === 'stock') {
+          return sortDirection === 'asc'
+              ? a.stock_quantity - b.stock_quantity
+              : b.stock_quantity - a.stock_quantity;
+        }
+        return 0;
+      });
 
   return (
-    <div className="products-container">
-      {/* Заголовок и кнопки */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="products-title">Управление товарами</h1>
-        
-        <div className="products-actions">
-          <button 
-            onClick={handleSyncWithSeverRyba}
-            className="btn btn-secondary"
-            disabled={isSyncing}
-          >
-            {isSyncing ? 'Синхронизация...' : 'Синхронизировать с Север-Рыба'}
-          </button>
-          
-          <button 
-            onClick={() => {
-              setEditingProduct(null);
-              setNewProduct({
-                name: '',
-                description: '',
-                price: 0,
-                category_id: categories.length > 0 ? categories[0].id : 0,
-                stock_quantity: 0,
-                image_url: ''
-              });
-              setShowAddModal(true);
-            }}
-            className="btn btn-success"
-          >
-            Добавить товар
-          </button>
-        </div>
-      </div>
-      
-      {/* Фильтры и поиск */}
-      <div className="filters-container">
-        <div className="filter-group">
-          <label className="filter-label">
-            Поиск по названию или описанию
-          </label>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Введите текст для поиска..."
-            className="filter-input"
-          />
-        </div>
-        
-        <div className="filter-group">
-          <label className="filter-label">
-            Фильтр по категории
-          </label>
-          <select
-            value={filter === null ? '' : filter}
-            onChange={(e) => handleFilterChange(e.target.value ? Number(e.target.value) : null)}
-            className="filter-select"
-          >
-            <option value="">Все категории</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="filter-group">
-          <label className="filter-label">
-            Сортировка
-          </label>
-          <div className="flex">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="filter-select"
-              style={{ borderRadius: '6px 0 0 6px' }}
-            >
-              <option value="name">По названию</option>
-              <option value="price">По цене</option>
-              <option value="stock">По количеству</option>
-            </select>
+      <div className="products-container">
+        {/* Заголовок и кнопки */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="products-title">Управление товарами</h1>
+
+          <div className="products-actions">
             <button
-              onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-              className="sort-direction-btn"
+                onClick={handleSyncWithSeverRyba}
+                className="btn btn-secondary"
+                disabled={isSyncing}
             >
-              {sortDirection === 'asc' ? '↑' : '↓'}
+              {isSyncing ? 'Синхронизация...' : 'Синхронизировать с Север-Рыба'}
+            </button>
+
+            <button
+                onClick={() => {
+                  setEditingProduct(null);
+                  setNewProduct({
+                    name: '',
+                    description: '',
+                    price: 0,
+                    category_id: categories.length > 0 ? categories[0].id : 0,
+                    stock_quantity: 0,
+                    image_url: ''
+                  });
+                  setShowAddModal(true);
+                }}
+                className="btn btn-success"
+            >
+              Добавить товар
             </button>
           </div>
         </div>
-      </div>
-      
-      {/* Уведомления */}
-      {error && (
-        <div className="notification notification-error">
-          <p>{error}</p>
-        </div>
-      )}
-      
-      {errorMessage && (
-        <div className="notification notification-error">
-          <p>{errorMessage}</p>
-          <button 
-            onClick={() => setErrorMessage(null)} 
-            className="notification-close"
-          >
-            ×
-          </button>
-        </div>
-      )}
-      
-      {showSuccessMessage && (
-        <div className="fixed-notification notification-success">
-          <p>Данные успешно синхронизированы с Север-Рыба</p>
-        </div>
-      )}
-      
-      {/* Таблица продуктов */}
-      {loading && products.length === 0 ? (
-        <div className="empty-state">
-          <div className="loading-spinner"></div>
-        </div>
-      ) : filteredProducts.length === 0 ? (
-        <div className="empty-state">
-          <p className="empty-state-message">Нет товаров для отображения</p>
-        </div>
-      ) : (
-        <div className="products-table-container">
-          <div className="overflow-x-auto">
-            <table className="products-table">
-              <thead>
-                <tr>
-                  <th onClick={() => handleSort('name')}>
-                    Название {sortBy === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th>Категория</th>
-                  <th onClick={() => handleSort('price')}>
-                    Цена {sortBy === 'price' && (sortDirection === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td>
-                      <div className="product-cell">
-                        {product.image_url && (
-                          <img 
-                            className="product-image" 
-                            src={product.image_url} 
-                            alt={product.name} 
-                          />
-                        )}
-                        <div className="product-info">
-                          <div className="product-name">{product.name}</div>
-                          <div className="product-description">{product.description}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>{getCategoryName(product.category_id)}</td>
-                    <td>{product.price.toLocaleString('ru-RU')} ₽</td>
-                    <td>
-                      <button
-                        onClick={() => openEditModal(product)}
-                        className="table-action-btn"
-                      >
-                        Редактировать
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="table-action-btn delete"
-                      >
-                        Удалить
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+        {/* Фильтры и поиск */}
+        <div className="filters-container">
+          <div className="filter-group">
+            <label className="filter-label">
+              Поиск по названию или описанию
+            </label>
+            <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Введите текст для поиска..."
+                className="filter-input"
+            />
           </div>
-        </div>
-      )}
-      
-      {/* Модальное окно добавления/редактирования товара */}
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {editingProduct ? 'Редактирование товара' : 'Добавление нового товара'}
-              </h3>
+
+          <div className="filter-group">
+            <label className="filter-label">
+              Фильтр по категории
+            </label>
+            <select
+                value={filter === null ? '' : filter}
+                onChange={(e) => handleFilterChange(e.target.value ? Number(e.target.value) : null)}
+                className="filter-select"
+            >
+              <option value="">Все категории</option>
+              {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label">
+              Сортировка
+            </label>
+            <div className="flex">
+              <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="filter-select"
+                  style={{ borderRadius: '6px 0 0 6px' }}
+              >
+                <option value="name">По названию</option>
+                <option value="price">По цене</option>
+                <option value="stock">По количеству</option>
+              </select>
+              <button
+                  onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                  className="sort-direction-btn"
+              >
+                {sortDirection === 'asc' ? '↑' : '↓'}
+              </button>
             </div>
-            
-            <form onSubmit={handleSubmit}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label className="form-label form-label-required">
-                    Название
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newProduct.name}
-                    onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                    className="form-control"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">
-                    Описание
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newProduct.description}
-                    onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
-                    className="form-control"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label form-label-required">
-                    Категория
-                  </label>
-                  <select
-                    required
-                    value={newProduct.category_id}
-                    onChange={(e) => setNewProduct({...newProduct, category_id: Number(e.target.value)})}
-                    className="form-control"
-                  >
-                    <option value="">Выберите категорию</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label form-label-required">
-                    Цена (₽)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    value={newProduct.price}
-                    onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
-                    className="form-control"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label className="form-label">
-                    URL изображения
-                  </label>
-                  <input
-                    type="text"
-                    value={newProduct.image_url}
-                    onChange={(e) => setNewProduct({...newProduct, image_url: e.target.value})}
-                    className="form-control"
-                  />
-                </div>
-              </div>
-              
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingProduct(null);
-                  }}
-                  className="btn btn-outline"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                >
-                  {editingProduct ? 'Сохранить изменения' : 'Добавить товар'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Уведомления */}
+        {error && (
+            <div className="notification notification-error">
+              <p>{error}</p>
+            </div>
+        )}
+
+        {errorMessage && (
+            <div className="notification notification-error">
+              <p>{errorMessage}</p>
+              <button
+                  onClick={() => setErrorMessage(null)}
+                  className="notification-close"
+              >
+                ×
+              </button>
+            </div>
+        )}
+
+        {showSuccessMessage && (
+            <div className="fixed-notification notification-success">
+              <p>Данные успешно синхронизированы с Север-Рыба</p>
+            </div>
+        )}
+
+        {/* Таблица продуктов */}
+        {loading && products.length === 0 ? (
+            <div className="empty-state">
+              <div className="loading-spinner"></div>
+            </div>
+        ) : filteredProducts.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-state-message">Нет товаров для отображения</p>
+            </div>
+        ) : (
+            <div className="products-table-container">
+              <div className="overflow-x-auto">
+                <table className="products-table">
+                  <thead>
+                  <tr>
+                    <th onClick={() => handleSort('name')}>
+                      Название {sortBy === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th>Категория</th>
+                    <th onClick={() => handleSort('price')}>
+                      Цена {sortBy === 'price' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th>Действия</th>
+                  </tr>
+                  </thead>
+                  <tbody>
+                  {filteredProducts.map((product) => (
+                      <tr key={product.id}>
+                        <td>
+                          <div className="product-cell">
+                            {product.image_url && (
+                                <img
+                                    className="product-image"
+                                    src={product.image_url}
+                                    alt={product.name}
+                                />
+                            )}
+                            <div className="product-info">
+                              <div className="product-name">{product.name}</div>
+                              <div className="product-description">{product.description || ''}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{getCategoryName(product.category_id)}</td>
+                        <td>{product.price.toLocaleString('ru-RU')} ₽</td>
+                        <td>
+                          <button
+                              onClick={() => openEditModal(product)}
+                              className="table-action-btn"
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                              onClick={() => handleDelete(product.id)}
+                              className="table-action-btn delete"
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                  ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+        )}
+
+        {/* Модальное окно добавления/редактирования товара */}
+        {showAddModal && (
+            <div className="modal-overlay">
+              <div className="modal-container">
+                <div className="modal-header">
+                  <h3 className="modal-title">
+                    {editingProduct ? 'Редактирование товара' : 'Добавление нового товара'}
+                  </h3>
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                  <div className="modal-body">
+                    <div className="form-group">
+                      <label className="form-label form-label-required">
+                        Название
+                      </label>
+                      <input
+                          type="text"
+                          required
+                          value={newProduct.name}
+                          onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                          className="form-control"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        Описание
+                      </label>
+                      <textarea
+                          rows={3}
+                          value={newProduct.description}
+                          onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
+                          className="form-control"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label form-label-required">
+                        Категория
+                      </label>
+                      <select
+                          required
+                          value={newProduct.category_id}
+                          onChange={(e) => setNewProduct({...newProduct, category_id: Number(e.target.value)})}
+                          className="form-control"
+                      >
+                        <option value="">Выберите категорию</option>
+                        {categories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label form-label-required">
+                        Цена (₽)
+                      </label>
+                      <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={newProduct.price}
+                          onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
+                          className="form-control"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">
+                        URL изображения
+                      </label>
+                      <input
+                          type="text"
+                          value={newProduct.image_url}
+                          onChange={(e) => setNewProduct({...newProduct, image_url: e.target.value})}
+                          className="form-control"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="modal-footer">
+                    <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddModal(false);
+                          setEditingProduct(null);
+                        }}
+                        className="btn btn-outline"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                        type="submit"
+                        className="btn btn-primary"
+                    >
+                      {editingProduct ? 'Сохранить изменения' : 'Добавить товар'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+        )}
+      </div>
   );
 };
 
