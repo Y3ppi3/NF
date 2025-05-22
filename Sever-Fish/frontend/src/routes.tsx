@@ -2,22 +2,21 @@ import React from 'react';
 import { Navigate, RouteObject } from 'react-router-dom';
 import { isAuthenticated } from './utils/storage';
 
-// Импорт макетов
-import { MainLayout } from './components/layout/MainLayout';
-import { AuthLayout } from './components/layout/AuthLayout';
+// Импорт компонентов напрямую
+import MainLayout from './layout/MainLayout';
 
-// Импорт страниц (предполагается, что они уже существуют)
-import { Home } from './pages/Home';
-import { ProductDetails } from './pages/ProductDetails';
-import { CategoryProducts } from './pages/CategoryProducts';
-import { Cart } from './pages/Cart';
-import { Checkout } from './pages/Checkout';
-import { OrderSuccess } from './pages/OrderSuccess';
-import { Orders } from './pages/Orders';
-import { OrderDetails } from './pages/OrderDetails';
-import { Profile } from './pages/Profile';
-import { Auth } from './pages/Auth';
-import { NotFound } from './pages/NotFound';
+// Импорт страниц
+import Home from './pages/Home';
+import ProductDetails from './pages/ProductDetails';
+import CategoryProducts from './pages/CategoryProducts';
+import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import OrderSuccess from './pages/OrderSuccess';
+import Orders from './pages/Orders';
+import OrderDetails from './pages/OrderDetails';
+import Account from './pages/Account'; // Вместо Profile
+import Auth from './pages/Auth';
+import NotFound from './pages/NotFound';
 
 // Защищенный маршрут - только для авторизованных пользователей
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -81,7 +80,7 @@ export const routes: RouteObject[] = [
         path: 'profile',
         element: (
           <ProtectedRoute>
-            <Profile />
+            <Account />
           </ProtectedRoute>
         ),
       },

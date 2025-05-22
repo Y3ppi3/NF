@@ -1,15 +1,16 @@
-// Типы для корзины
+import { Product } from './products';
+
 export interface CartItem {
   id: number;
   product_id: number;
   quantity: number;
-  user_id: number;
-  // Дополнительные данные из связанного товара
-  product?: {
-    name: string;
-    price: number;
-    image_url?: string;
-  };
+  product?: Product;
+}
+
+export interface CartSummary {
+  items: CartItem[];
+  total_items: number;
+  total_amount: number;
 }
 
 export interface AddToCartRequest {
@@ -19,10 +20,4 @@ export interface AddToCartRequest {
 
 export interface UpdateCartItemRequest {
   quantity: number;
-}
-
-export interface CartSummary {
-  total_items: number;
-  total_amount: number;
-  items: CartItem[];
 }

@@ -1,21 +1,29 @@
-FROM node:18-alpine
+# Stage 1: Build the application
+FROM node:18-alpine as build
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+# Копируем только package.json
+COPY package.json ./
+
+# Устанавливаем зависимости
 RUN npm install
 
+# Копируем остальные файлы приложения
 COPY . .
-ENV REACT_APP_API_URL=http://localhost:8000
 
-# Build the app
+# Собираем приложение
 RUN npm run build
 
-# Install serve to run the application
-RUN npm install -g serve
+# Stage 2: Create production image
+FROM nginx:alpine
 
-# Expose the port the app will run on
-EXPOSE 3000
+# Копируем собранное приложение из стадии сборки
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Command to run the application
-CMD ["serve", "-s", "build", "-l", "3000"]
+# Копируем конфигурацию nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
