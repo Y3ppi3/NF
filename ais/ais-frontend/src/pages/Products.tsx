@@ -55,53 +55,159 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
   // Используем контекст загрузки
   const { startLoading, stopLoading } = useLoading();
 
-  // Функция для загрузки категорий
+// Функция для загрузки категорий
   const fetchCategories = async () => {
     try {
-      // Прямой запрос к API для получения категорий
-      const authToken = token || localStorage.getItem('token');
-      const response = await axios.get(`${API_BASE_URL}/api/categories`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`
+      console.log("Запрос категорий - начало");
+
+      // Сначала попробуем получить категории из списка продуктов, так как этот эндпоинт работает
+      const productsEndpoint = "http://localhost:8080/ais/api/products";
+
+      try {
+        console.log(`Получаем категории из списка продуктов: ${productsEndpoint}`);
+        const authToken = token || localStorage.getItem('token');
+        const response = await axios.get(productsEndpoint, {
+          headers: {
+            Authorization: authToken ? `Bearer ${authToken}` : undefined
+          }
+        });
+
+        if (response.data && Array.isArray(response.data)) {
+          console.log(`Успешно получены данные продуктов, извлекаем категории`);
+          const products = response.data;
+
+          // Создаем карту для отслеживания уже добавленных категорий
+          const categoryMap = new Map();
+
+          // Обходим все продукты и собираем встречающиеся категории
+          products.forEach(product => {
+            if (product && product.category_id !== undefined && product.category_id !== null) {
+              // Если эта категория еще не добавлена в карту
+              if (!categoryMap.has(product.category_id)) {
+                let categoryName = "Неизвестная категория";
+
+                // Проверяем различные поля, которые могут содержать имя категории
+                if (product.category_name) {
+                  categoryName = product.category_name;
+                } else if (product.category && product.category.name) {
+                  categoryName = product.category.name;
+                } else {
+                  // Проверим, есть ли у других продуктов в этой категории имя категории
+                  const otherProductWithSameCategory = products.find(p =>
+                      p.category_id === product.category_id &&
+                      (p.category_name || (p.category && p.category.name))
+                  );
+
+                  if (otherProductWithSameCategory) {
+                    categoryName = otherProductWithSameCategory.category_name ||
+                        (otherProductWithSameCategory.category && otherProductWithSameCategory.category.name) ||
+                        `Категория ${product.category_id}`;
+                  } else {
+                    categoryName = `Категория ${product.category_id}`;
+                  }
+                }
+
+                // Добавляем категорию в карту
+                categoryMap.set(product.category_id, {
+                  id: product.category_id,
+                  name: categoryName,
+                  description: ''
+                });
+              }
+            }
+          });
+
+          // Преобразуем карту в массив
+          const extractedCategories = Array.from(categoryMap.values());
+
+          if (extractedCategories.length > 0) {
+            console.log(`Успешно извлечено ${extractedCategories.length} категорий из продуктов`);
+            setCategories(extractedCategories);
+            return extractedCategories;
+          }
         }
-      });
+      } catch (err) {
+        console.error('Ошибка при извлечении категорий из продуктов:', err);
+      }
 
-      // Проверяем структуру ответа и выделяем только категории
-      let categoriesData = response.data;
+      // Если не удалось получить категории из продуктов, пробуем еще несколько URL напрямую
+      // без использования прокси, так как все прокси-запросы завершаются ошибкой
+      const directEndpoints = [
+        "http://localhost:8080/ais/api/categories",
+        "http://localhost:8080/api/categories",
+        "http://localhost:8080/categories"
+      ];
 
-      // Если получены данные в нестандартном формате, пытаемся найти категории
-      if (!Array.isArray(categoriesData) || (categoriesData.length > 0 && !categoriesData[0].hasOwnProperty('name'))) {
-        console.warn('Получены данные в неправильном формате, пытаемся распознать структуру...');
+      for (const endpoint of directEndpoints) {
+        try {
+          console.log(`Пробуем прямой запрос к: ${endpoint}`);
+          const authToken = token || localStorage.getItem('token');
+          const response = await axios.get(endpoint, {
+            headers: {
+              Authorization: authToken ? `Bearer ${authToken}` : undefined
+            }
+          });
 
-        // Проверяем различные форматы ответа API
-        if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
-          categoriesData = categoriesData.categories;
-        } else if (categoriesData.data && Array.isArray(categoriesData.data)) {
-          categoriesData = categoriesData.data;
-        } else if (categoriesData.results && Array.isArray(categoriesData.results)) {
-          categoriesData = categoriesData.results;
+          console.log(`Успешно получен ответ от ${endpoint}`);
+
+          // Получаем данные
+          let data = response.data;
+          let categoriesData = [];
+
+          // Обрабатываем различные форматы ответа API
+          if (Array.isArray(data)) {
+            categoriesData = data;
+          } else if (data.categories && Array.isArray(data.categories)) {
+            categoriesData = data.categories;
+          } else if (data.data && Array.isArray(data.data)) {
+            categoriesData = data.data;
+          } else if (data.results && Array.isArray(data.results)) {
+            categoriesData = data.results;
+          }
+
+          // Фильтруем и проверяем обязательные поля
+          const validCategories = categoriesData.filter(item =>
+              item && typeof item === 'object' &&
+              item.hasOwnProperty('id') &&
+              item.hasOwnProperty('name')
+          );
+
+          if (validCategories.length > 0) {
+            console.log(`Успешно загружено ${validCategories.length} категорий из ${endpoint}`);
+            setCategories(validCategories);
+            return validCategories;
+          }
+        } catch (err) {
+          console.log(`Ошибка при прямом запросе к ${endpoint}:`, err);
         }
       }
 
-      // Проверка наличия требуемых полей в категориях и фильтрация товаров
-      const validCategories = Array.isArray(categoriesData)
-          ? categoriesData.filter(item =>
-              item && typeof item === 'object' &&
-              item.hasOwnProperty('id') &&
-              item.hasOwnProperty('name') &&
-              !item.hasOwnProperty('price')) // Это признак что это категория, а не товар
-          : [];
+      // Если все запросы не удались, используем предустановленные категории
+      console.log('Все запросы на получение категорий не удались, используем предустановленные категории');
+      const defaultCategories = [
+        { id: 1, name: 'Свежая рыба', description: 'Свежая рыба и морепродукты' },
+        { id: 2, name: 'Замороженная рыба', description: 'Замороженная рыба и морепродукты' },
+        { id: 3, name: 'Икра', description: 'Икра различных видов рыб' },
+        { id: 4, name: 'Консервы', description: 'Рыбные консервы и пресервы' },
+        { id: 5, name: 'Морепродукты', description: 'Различные морепродукты' }
+      ];
 
-      setCategories(validCategories);
-      console.log(`Успешно загружено ${validCategories.length} категорий`);
-      return validCategories;
+      setCategories(defaultCategories);
+      return defaultCategories;
+
     } catch (error) {
-      console.error('Ошибка при загрузке категорий:', error);
-      return [];
+      console.error('Критическая ошибка при загрузке категорий:', error);
+
+      // В случае критической ошибки, возвращаем базовые категории
+      const fallbackCategories = [
+        { id: 1, name: 'Категория 1', description: '' },
+        { id: 2, name: 'Категория 2', description: '' }
+      ];
+
+      setCategories(fallbackCategories);
+      return fallbackCategories;
     }
   };
-
-  // Загрузка товаров и категорий при монтировании
   useEffect(() => {
     // Модифицируем функцию fetchData
     const fetchData = async () => {
