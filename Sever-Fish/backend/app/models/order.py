@@ -33,7 +33,8 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("orders.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Integer)
-    price = Column(Float)  # Цена на момент заказа
+    price = Column(Float)
+    product_name = Column(String, nullable=True)  # Добавляем это поле
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")

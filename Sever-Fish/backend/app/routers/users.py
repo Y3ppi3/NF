@@ -98,17 +98,46 @@ async def login_for_access_token(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    full_name: Optional[str] = None
+    is_active: bool = True
+    is_admin: bool = False
+    created_at: Optional[datetime] = None
 
-@router.get("/me", response_model=UserProfile)
-async def read_users_me(
-        request: Request,
-        db: Session = Depends(get_db)
-):
+    class Config:
+        orm_mode = True
+        
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(request: Request, db: Session = Depends(get_db)):
     """
-    Получает профиль текущего пользователя.
+    Получает информацию о текущем пользователе на основе токена авторизации.
     """
+    # Получаем текущего пользователя
     user = await require_auth(request, db)
-    return user
+
+    # Преобразуем пользователя в словарь для ответа
+    user_dict = {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "full_name": user.full_name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at.isoformat() if user.created_at else None
+    }
+
+    # Создаем json-ответ с CORS-заголовками
+    headers = {
+        "Access-Control-Allow-Origin": "http://localhost:5173",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Credentials": "true"
+    }
+    
+    return JSONResponse(content=user_dict, headers=headers)
 
 
 @router.put("/me", response_model=UserProfile)

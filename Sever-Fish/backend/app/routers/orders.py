@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Body, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Body, status, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Any, List, Optional
 from datetime import datetime
@@ -17,6 +18,17 @@ class ApiResponse(BaseModel):
 
 router = APIRouter()
 
+@router.options("/{rest_of_path:path}", include_in_schema=False)
+async def options_handler(request: Request, rest_of_path: str):
+    """
+    Обработчик OPTIONS запросов для CORS
+    """
+    response = Response()
+    response.headers["Access-Control-Allow-Origin"] = "http://localhost:5173"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 @router.post("/", response_model=OrderResponse)
 async def create_order(
@@ -177,7 +189,16 @@ async def get_user_orders(
         Order.created_at.desc()
     ).offset(skip).limit(limit).all()
 
-    return orders
+    # Создаем json-ответ с CORS-заголовками
+    content = [order.__dict__ for order in orders]
+    headers = {
+        "Access-Control-Allow-Origin": "http://localhost:5173",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Credentials": "true"
+    }
+    
+    return JSONResponse(content=content, headers=headers)
 
 
 @router.get("/all", response_model=List[OrderResponse])
