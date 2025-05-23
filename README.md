@@ -1,4 +1,4 @@
-# AIS + Sever-Fish + api-gateway
+# [AIS](https://github.com/Y3ppi3/NorthFish/tree/main/ais) + [Sever-Fish](https://github.com/Y3ppi3/NorthFish/tree/main/Sever-Fish) + [api-gateway](https://github.com/Y3ppi3/NorthFish/tree/main/api-gateway)
 
 <div align="center">
   <img src="./ais/ais-frontend/public/logo2.png" alt="sever-fish logo" width="170"/><img src="./ais/ais-frontend/public/logo.png" alt="sever-fish logo" width="200"/>
