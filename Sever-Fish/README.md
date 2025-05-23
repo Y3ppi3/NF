@@ -138,7 +138,7 @@ docker-compose down
 ### Добавление новых миграций
 ```bash
 docker exec -it ais-backend bash -c "cd /app && alembic revision -m 'ОПИСАНИЕ ИЗМЕНЕНИЙ'"
-docker exec -it ais-backend bash -c "cd /app && alembic alembic upgrade head
+docker exec -it ais-backend bash -c "cd /app && alembic alembic upgrade head"
 ```
 
 ### Доступ к сервисам
