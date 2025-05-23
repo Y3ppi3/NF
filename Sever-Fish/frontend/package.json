@@ -1,11 +1,12 @@
 {
-  "name": "sever-fish-frontend",
+  "name": "northfish-cliend.frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,7 +21,6 @@
   "devDependencies": {
     "@eslint/js": "^9.19.0",
     "@types/js-cookie": "^3.0.6",
-    "@types/node": "^22.15.21",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@typescript-eslint/parser": "^8.25.0",

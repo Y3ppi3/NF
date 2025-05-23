@@ -1,128 +1,212 @@
-import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
-
-// Импорт макетов
-import { MainLayout } from './layout/MainLayout';
-
-// Импорт страниц
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import Home from './pages/Home';
-import About from './pages/About';
 import Products from './pages/Products';
-import ProductDetails from './pages/ProductDetail';
-import Cart from './pages/Cart';
-import Checkout from './pages/Checkout';
-import Orders from './pages/Orders';
-import OrderDetails from './pages/OrderDetails';
-import OrderSuccess from './pages/OrderSuccess';
-import Account from './pages/Account';
+import ProductCategory from './pages/ProductCategory';
+import About from './pages/About';
+import Contacts from './pages/Contacts';
 import Recipes from './pages/Recipes';
+import Production from './pages/Production';
+import Cart from './pages/Cart';
 import Auth from './pages/Auth';
-import NotFound from './pages/NotFound';
+import axios from 'axios';
+import Account from './pages/Account';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import CookieConsent from './components/CookieConsent';
+import MobileMenu from './components/MobileMenu';
+import ProductDetail from './pages/ProductDetail';
+// Добавляем импорт API_BASE_URL
+import { API_BASE_URL } from './utils/apiConfig';
 
-// Защищенный маршрут - только для авторизованных пользователей
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-  
-  // Показываем лоадер, пока проверяем авторизацию
-  if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-    </div>;
-  }
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
-  }
-  
-  return <>{children}</>;
-};
+// Компонент для защиты приватных маршрутов
+function RequireAuth({ children }: { children: JSX.Element }) {
+    const token = localStorage.getItem('token');
+    const location = useLocation();
+    
+    if (!token) {
+        // Запоминаем текущий путь для перенаправления после авторизации
+        localStorage.setItem('redirectAfterAuth', location.pathname);
+        return <Navigate to="/auth" state={{ from: location }} replace />;
+    }
+    
+    return children;
+}
 
-// Маршрут только для гостей - редирект на главную для авторизованных
-const GuestRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
-  
-  // Показываем лоадер, пока проверяем авторизацию
-  if (loading) {
-    return <div className="flex justify-center items-center min-h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-    </div>;
-  }
-  
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
-  
-  return <>{children}</>;
-};
+function App() {
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [cartCount, setCartCount] = useState(0);
 
-const App: React.FC = () => {
-  const { checkAuth } = useAuth();
+    // Функция для обновления счетчика корзины
+    const updateCartCount = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+            
+            if (!token) {
+                setCartCount(0);
+                return;
+            }
+            
+            // Пробуем получить данные корзины
+            const response = await axios.get(`${API_BASE_URL}/api/cart`, {
+                headers: { 'Authorization': `${tokenType} ${token}` }
+            });
+            
+            // Проверяем формат данных
+            const data = response.data;
+            
+            if (data && Array.isArray(data.items)) {
+                // Если data.items - массив, используем его
+                setCartCount(data.items.reduce((sum, item) => sum + item.quantity, 0));
+            } else if (data && typeof data === 'object') {
+                // Если data - объект, но не с ожидаемой структурой, ищем другие поля
+                if (Array.isArray(data.cart_items)) {
+                    setCartCount(data.cart_items.reduce((sum, item) => sum + item.quantity, 0));
+                } else if (data.total_items !== undefined) {
+                    // Если есть поле total_items, используем его
+                    setCartCount(data.total_items);
+                } else {
+                    // Иначе устанавливаем 0
+                    console.log("Формат данных корзины не содержит ожидаемых полей:", data);
+                    setCartCount(0);
+                }
+            } else {
+                // Если data не соответствует ожидаемой структуре, устанавливаем 0
+                console.log("Неожиданный формат данных корзины:", data);
+                setCartCount(0);
+            }
+        } catch (error) {
+            console.error("Ошибка при загрузке корзины:", error);
+            // Если ошибка 401 (Unauthorized), сбрасываем данные авторизации
+            if (axios.isAxiosError(error) && error.response?.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('tokenType');
+                localStorage.removeItem('userId');
+                localStorage.removeItem('username');
+            }
+            setCartCount(0);
+        }
+    };
   
-  // Проверяем авторизацию при запуске приложения
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    // Функция для переключения меню (четко определенная)
+    const toggleMobileMenu = () => {
+        setIsMobileMenuOpen(prevState => !prevState);
+    };
 
-  return (
-    <Routes>
-      {/* Основные маршруты с MainLayout */}
-      <Route path="/" element={<MainLayout />}>
-        <Route index element={<Home />} />
-        <Route path="about" element={<About />} />
-        <Route path="recipes" element={<Recipes />} />
+    // Функция для закрытия меню
+    const closeMobileMenu = () => {
+        setIsMobileMenuOpen(false);
+    };
+
+    // Настройка интерцептора axios
+    useEffect(() => {
+        // Добавляем токен авторизации ко всем запросам
+        const requestInterceptor = axios.interceptors.request.use(
+            (config) => {
+                const token = localStorage.getItem('token');
+                const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+                
+                if (token) {
+                    config.headers.Authorization = `${tokenType} ${token}`;
+                }
+                return config;
+            },
+            (error) => Promise.reject(error)
+        );
         
-        {/* Товары */}
-        <Route path="products" element={<Products />} />
-        <Route path="products/:productId" element={<ProductDetails />} />
-        <Route path="categories/:categoryId" element={<CategoryProducts />} />
+        // Обрабатываем ошибки авторизации
+        const responseInterceptor = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (axios.isAxiosError(error) && error.response?.status === 401) {
+                    // Если сервер ответил 401, пользователь не авторизован
+                    console.log('Ошибка авторизации, перенаправление на страницу входа');
+                }
+                return Promise.reject(error);
+            }
+        );
         
-        {/* Корзина и заказы */}
-        <Route path="cart" element={<Cart />} />
-        <Route path="checkout" element={
-          <ProtectedRoute>
-            <Checkout />
-          </ProtectedRoute>
-        } />
+        // Удаляем интерцепторы при размонтировании
+        return () => {
+            axios.interceptors.request.eject(requestInterceptor);
+            axios.interceptors.response.eject(responseInterceptor);
+        };
+    }, []);
+
+    // Обновляем корзину при загрузке приложения
+    useEffect(() => {
+        updateCartCount();
+    }, []);
+
+    // Управление классом body для мобильного меню
+    useEffect(() => {
+        if (isMobileMenuOpen) {
+            document.body.classList.add('mobile-menu-open');
+        } else {
+            document.body.classList.remove('mobile-menu-open');
+        }
+        return () => {
+            document.body.classList.remove('mobile-menu-open');
+        };
+    }, [isMobileMenuOpen]);
+
+    // Проверяем, нужно ли перенаправить пользователя после авторизации
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        const redirectPath = localStorage.getItem('redirectAfterAuth');
         
-        {/* Заказы - требуют авторизации */}
-        <Route path="orders" element={
-          <ProtectedRoute>
-            <Orders />
-          </ProtectedRoute>
-        } />
-        <Route path="orders/:orderId" element={
-          <ProtectedRoute>
-            <OrderDetails />
-          </ProtectedRoute>
-        } />
-        <Route path="orders/:orderId/success" element={
-          <ProtectedRoute>
-            <OrderSuccess />
-          </ProtectedRoute>
-        } />
-        
-        {/* Профиль пользователя */}
-        <Route path="profile" element={
-          <ProtectedRoute>
-            <Account />
-          </ProtectedRoute>
-        } />
-      </Route>
-      
-      {/* Авторизация и регистрация */}
-      <Route path="/auth" element={
-        <GuestRoute>
-          <AuthLayout />
-        </GuestRoute>
-      }>
-        <Route index element={<Auth />} />
-      </Route>
-      
-      {/* Страница 404 */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
+        if (token && redirectPath) {
+            // Очищаем информацию о перенаправлении
+            localStorage.removeItem('redirectAfterAuth');
+            // Обновляем количество товаров в корзине
+            updateCartCount();
+        }
+    }, []);
+
+    return (
+        <Router>
+            <Header 
+                onMenuToggle={toggleMobileMenu} 
+                cartCount={cartCount} 
+                updateCartCount={updateCartCount} 
+            />
+            <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/products" element={<Products updateCartCount={updateCartCount} />} />
+                <Route path="/products/category/:category" element={<Products updateCartCount={updateCartCount} />} />
+                <Route path="/products/:id" element={<ProductDetail updateCartCount={updateCartCount} />} />
+                
+                {/* Защищенные маршруты */}
+                <Route path="/cart" element={
+                    <RequireAuth>
+                        <Cart updateCartCount={updateCartCount} />
+                    </RequireAuth>
+                } />
+                <Route path="/account" element={
+                    <RequireAuth>
+                        <Account />
+                    </RequireAuth>
+                } />
+                
+                {/* Общедоступные маршруты */}
+                <Route path="/about" element={<About />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/recipes" element={<Recipes />} />
+                <Route path="/production" element={<Production />} />
+                <Route path="/auth" element={<Auth />} />
+                
+                {/* Перенаправление для несуществующих маршрутов */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            <Footer />
+            <CookieConsent />
+            <MobileMenu 
+                isOpen={isMobileMenuOpen} 
+                setIsOpen={setIsMobileMenuOpen} 
+            />
+        </Router>
+    );
+}
 
 export default App;
