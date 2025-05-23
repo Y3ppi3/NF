@@ -148,6 +148,7 @@ else:
     app.mount("/images", StaticFiles(directory=PRODUCTS_IMAGES_DIR), name="images")
 
 
+
 @app.get("/")
 async def root():
     """Корневой маршрут API"""

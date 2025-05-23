@@ -28,3 +28,53 @@ export const API_ENDPOINTS = {
   ORDER_BY_ID: (id: number) => `${API_BASE_URL}/api/orders/${id}`,
   ORDER_BY_ID_ALT: (id: number) => `${API_BASE_URL}/orders/${id}`,
 };
+
+// Получение заголовков с авторизацией
+export const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+  
+  if (!token) {
+    return {};
+  }
+  
+  return {
+    'Authorization': `${tokenType} ${token}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+};
+
+// Функция для форматирования даты
+export const formatDate = (dateString: string) => {
+  if (!dateString) return '';
+  
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric', 
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return dateString;
+  }
+};
+
+// Функция для форматирования цены
+export const formatPrice = (price: number) => {
+  if (!price && price !== 0) return '';
+  
+  return price.toLocaleString('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
+};
+
+// Текущая дата и пользователь (для дебага)
+export const CURRENT_DATE = "2025-05-23 11:54:14";
+export const CURRENT_USER = "katarymba";

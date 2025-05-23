@@ -1,9 +1,9 @@
+axios.defaults.withCredentials = true;
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Cart.css';
 import CheckoutForm from '../components/CheckoutForm';
-import { useCart } from '../contexts/CartContext';
 import { API_BASE_URL } from '../utils/apiConfig';
 
 // Компонент уведомления о необходимости авторизации
@@ -30,22 +30,106 @@ const AuthNotification = () => {
   );
 };
 
+// Интерфейсы для типизации данных
+interface UserProfile {
+  id: number;
+  username: string;
+  email: string | null;
+  phone: string | null;
+  full_name: string | null;
+}
+
+// Интерфейс для пропсов компонента
+interface CartProps {
+  updateCartCount: () => void;
+}
+
+// Функция для получения корзины из localStorage
+const getCartFromLocalStorage = () => {
+  try {
+    const cartData = localStorage.getItem('cart');
+    if (cartData) {
+      return JSON.parse(cartData);
+    }
+  } catch (e) {
+    console.error('Ошибка при получении корзины из localStorage:', e);
+  }
+  return [];
+};
+
+// Функция для сохранения корзины в localStorage
+const saveCartToLocalStorage = (cart) => {
+  try {
+    localStorage.setItem('cart', JSON.stringify(cart));
+  } catch (e) {
+    console.error('Ошибка при сохранении корзины в localStorage:', e);
+  }
+};
+
+// Функция для создания временного заказа в локальном хранилище
+const saveOrderToLocalStorage = (orderData, cartItems) => {
+  try {
+    const ordersJson = localStorage.getItem('localOrders');
+    let orders = [];
+    
+    if (ordersJson) {
+      orders = JSON.parse(ordersJson);
+    }
+    
+    // Создаем временный заказ с идентификатором, основанным на текущем времени
+    const tempOrder = {
+      id: Date.now(),
+      ...orderData,
+      status: "pending",
+      created_at: new Date().toISOString(),
+      items: cartItems.map(item => ({
+        product_id: parseInt(item.product_id),
+        quantity: item.quantity,
+        price: item.product?.price || 0,
+        product_name: item.product?.name || 'Неизвестный товар'
+      }))
+    };
+    
+    orders.push(tempOrder);
+    localStorage.setItem('localOrders', JSON.stringify(orders));
+    
+    return true;
+  } catch (e) {
+    console.error('Ошибка при сохранении заказа в localStorage:', e);
+    return false;
+  }
+};
+
 // Основной компонент корзины
-const Cart = () => {
-  const { cartItems, removeFromCart, updateCartItemQuantity, clearCart, isLoading: cartLoading, refreshCart } = useCart();
+const Cart: React.FC<CartProps> = ({ updateCartCount }) => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showCheckoutForm, setShowCheckoutForm] = useState(false);
-  const [userProfile, setUserProfile] = useState(null);
-  const navigate = useNavigate();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [cartItems, setCartItems] = useState([]);
+  const [orderSuccess, setOrderSuccess] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
 
   // Проверка авторизации
   const isAuthenticated = Boolean(localStorage.getItem('token'));
 
-  // Эффект для обновления корзины при изменении состояния авторизации
+  // Эффект для загрузки корзины при изменении состояния авторизации
   useEffect(() => {
-    refreshCart();
-  }, [isAuthenticated, refreshCart]);
+    const loadCart = () => {
+      try {
+        const items = getCartFromLocalStorage();
+        setCartItems(items);
+        // Обновляем счетчик корзины
+        updateCartCount();
+      } catch (error) {
+        console.error("Ошибка при загрузке корзины:", error);
+        setCartItems([]);
+      }
+    };
+    
+    loadCart();
+  }, [isAuthenticated, updateCartCount]);
 
   // Эффект для загрузки профиля пользователя, если он авторизован
   useEffect(() => {
@@ -53,18 +137,59 @@ const Cart = () => {
       if (!isAuthenticated) return;
       
       try {
+        // Пробуем получить профиль пользователя из localStorage
+        const userId = localStorage.getItem('userId');
+        const username = localStorage.getItem('username');
+        const email = localStorage.getItem('userEmail');
+        const phone = localStorage.getItem('userPhone');
+        const fullName = localStorage.getItem('userFullName');
+        
+        if (userId && username) {
+          // Если есть основные данные, создаем профиль из localStorage
+          setUserProfile({
+            id: Number(userId),
+            username: username,
+            email: email,
+            phone: phone,
+            full_name: fullName
+          });
+          return;
+        }
+        
+        // Если в localStorage нет всех данных, попробуем получить из токена
         const token = localStorage.getItem('token');
-        const tokenType = localStorage.getItem('tokenType');
-        
-        if (!token || !tokenType) return;
-        
-        const response = await axios.get(`${API_BASE_URL}/auth/profile`, {
-          headers: {
-            'Authorization': `${tokenType} ${token}`
+        if (token) {
+          try {
+            // Декодируем JWT токен
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            
+            const payload = JSON.parse(jsonPayload);
+            
+            if (payload.user_id && payload.sub) {
+              // Если в токене есть ID пользователя и email, создаем минимальный профиль
+              setUserProfile({
+                id: payload.user_id,
+                username: payload.sub,
+                email: payload.sub,
+                phone: null,
+                full_name: null
+              });
+              
+              // Сохраняем данные в localStorage для будущего использования
+              localStorage.setItem('userId', payload.user_id.toString());
+              localStorage.setItem('username', payload.sub);
+              localStorage.setItem('userEmail', payload.sub);
+              
+              return;
+            }
+          } catch (tokenError) {
+            console.error('Ошибка при декодировании токена:', tokenError);
           }
-        });
-        
-        setUserProfile(response.data);
+        }
       } catch (error) {
         console.error("Ошибка при загрузке профиля:", error);
       }
@@ -75,26 +200,76 @@ const Cart = () => {
 
   // Обработчик нажатия кнопки удаления товара
   const handleRemoveItem = useCallback(async (itemId) => {
-    await removeFromCart(itemId);
-  }, [removeFromCart]);
+    try {
+      // Удаляем товар из корзины
+      const updatedCart = cartItems.filter(item => item.id !== itemId);
+      setCartItems(updatedCart);
+      
+      // Сохраняем обновленную корзину в localStorage
+      saveCartToLocalStorage(updatedCart);
+      
+      // Обновляем счетчик корзины в шапке
+      updateCartCount();
+    } catch (error) {
+      console.error("Ошибка при удалении товара из корзины:", error);
+      setError('Не удалось удалить товар из корзины');
+    }
+  }, [cartItems, updateCartCount]);
 
   // Обработчик изменения количества товара
   const handleQuantityChange = useCallback(async (itemId, newQuantity) => {
     if (newQuantity < 1) return;
-    await updateCartItemQuantity(itemId, newQuantity);
-  }, [updateCartItemQuantity]);
+    
+    try {
+      // Обновляем количество товара в корзине
+      const updatedCart = cartItems.map(item => {
+        if (item.id === itemId) {
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      });
+      
+      setCartItems(updatedCart);
+      
+      // Сохраняем обновленную корзину в localStorage
+      saveCartToLocalStorage(updatedCart);
+      
+      // Обновляем счетчик корзины в шапке
+      updateCartCount();
+    } catch (error) {
+      console.error("Ошибка при изменении количества товара:", error);
+      setError('Не удалось изменить количество товара');
+    }
+  }, [cartItems, updateCartCount]);
 
   // Обработчик нажатия кнопки очистки корзины
   const handleClearCart = useCallback(async () => {
     if (window.confirm("Вы уверены, что хотите очистить корзину?")) {
-      await clearCart();
+      try {
+        // Очищаем корзину
+        setCartItems([]);
+        
+        // Сохраняем пустую корзину в localStorage
+        saveCartToLocalStorage([]);
+        
+        // Обновляем счетчик корзины в шапке
+        updateCartCount();
+      } catch (error) {
+        console.error("Ошибка при очистке корзины:", error);
+        setError('Не удалось очистить корзину');
+      }
     }
-  }, [clearCart]);
+  }, [updateCartCount]);
 
   // Обработчик нажатия кнопки оформления заказа
   const handleCheckout = () => {
     if (!isAuthenticated) {
       setError("Для оформления заказа необходимо авторизоваться");
+      return;
+    }
+    
+    if (cartItems.length === 0) {
+      setError("Корзина пуста. Добавьте товары перед оформлением заказа.");
       return;
     }
     
@@ -105,84 +280,152 @@ const Cart = () => {
   const handleCancelCheckout = () => {
     setShowCheckoutForm(false);
   };
+  
+  // Функция для добавления товаров в корзину на сервере
+  const addItemsToServerCart = async () => {
+    if (!isAuthenticated || cartItems.length === 0) return false;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+      
+      // Очищаем существующую корзину на сервере
+      try {
+        await axios.delete(`${API_BASE_URL}/cart`, {
+          headers: {
+            'Authorization': `${tokenType} ${token}`
+          }
+        });
+      } catch (clearError) {
+        console.error("Ошибка при очистке корзины на сервере:", clearError);
+      }
+      
+      // Добавляем товары в корзину на сервере
+      for (const item of cartItems) {
+        const response = await axios.post(`${API_BASE_URL}/cart`, {
+          product_id: parseInt(item.product_id),
+          quantity: item.quantity
+        }, {
+          headers: {
+            'Authorization': `${tokenType} ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (debugMode) {
+          console.log(`Товар ${item.product_id} добавлен в корзину на сервере:`, response.data);
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Ошибка при добавлении товаров в корзину на сервере:", error);
+      return false;
+    }
+  };
 
-  // Обработчик отправки формы оформления заказа
+  // Функция для оформления заказа
   const handleSubmitOrder = async (formData) => {
     if (!isAuthenticated) {
       setError("Для оформления заказа необходимо авторизоваться");
       return;
     }
     
+    if (cartItems.length === 0) {
+      setError("Корзина пуста. Добавьте товары перед оформлением заказа.");
+      return;
+    }
+    
     setLoading(true);
+    setError("");
     
     try {
-      const token = localStorage.getItem('token');
-      const tokenType = localStorage.getItem('tokenType');
-      
-      if (!token || !tokenType) {
-        throw new Error("Не удалось получить токен авторизации");
-      }
-      
-      // Подготавливаем данные для создания заказа
+      // Формируем данные для заказа
       const orderData = {
-        delivery_address: formData.address,
-        contact_phone: formData.phone,
-        contact_email: formData.email,
-        contact_name: `${formData.firstName} ${formData.lastName}`,
-        delivery_date: formData.deliveryDate,
-        payment_method: formData.paymentMethod,
-        items: cartItems.map(item => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.product.price
-        }))
+        delivery_address: formData.address || "",
+        phone: formData.phone || "",
+        email: formData.email || "",
+        name: `${formData.firstName} ${formData.lastName}`,
+        comment: formData.comment || "",
+        payment_method: formData.paymentMethod || "cash"
       };
       
-      // Пробуем разные URL для создания заказа
-      const orderApis = [
-        `${API_BASE_URL}/api/orders`,
-        `${API_BASE_URL}/orders`,
-        `${API_BASE_URL}/api/orders/`
-      ];
+      console.log("Данные для создания заказа:", orderData);
       
-      let success = false;
+      // Создаем временную копию заказа в localStorage (на случай ошибок)
+      saveOrderToLocalStorage(orderData, cartItems);
       
-      for (const api of orderApis) {
-        try {
-          console.log(`Попытка создания заказа по URL: ${api}`);
-          await axios.post(api, orderData, {
-            headers: {
-              'Authorization': `${tokenType} ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          success = true;
-          console.log(`Заказ успешно создан по ${api}`);
-          break;
-        } catch (err) {
-          console.error(`Ошибка при создании заказа по ${api}:`, err);
-          // Продолжаем пробовать следующий URL
+      // Сначала добавляем товары в корзину на сервере
+      const cartSync = await addItemsToServerCart();
+      
+      if (!cartSync) {
+        throw new Error("Не удалось синхронизировать корзину с сервером");
+      }
+      
+      // Теперь отправляем запрос на создание заказа
+      const token = localStorage.getItem('token');
+      const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+      
+      console.log("Отправляем заказ на сервер:", orderData);
+      
+      const response = await axios.post(`${API_BASE_URL}/orders/`, orderData, {
+        headers: {
+          'Authorization': `${tokenType} ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("Заказ успешно создан:", response.data);
+      
+      // Очищаем локальную корзину
+      setCartItems([]);
+      saveCartToLocalStorage([]);
+      
+      // Обновляем счетчик корзины в шапке
+      updateCartCount();
+      
+      // Отмечаем успешное создание заказа
+      setOrderSuccess(true);
+      
+      // Закрываем форму
+      setShowCheckoutForm(false);
+    } catch (error) {
+      console.error('Ошибка при оформлении заказа:', error);
+      
+      // Получаем детальную информацию об ошибке
+      let errorMessage = 'Не удалось оформить заказ. Пожалуйста, попробуйте позже.';
+      
+      if (error.response && error.response.data) {
+        console.log("Детальная информация об ошибке:", error.response.data);
+        
+        const responseData = error.response.data;
+        
+        // Если есть детальная информация об ошибке, показываем её
+        if (responseData.detail) {
+          if (Array.isArray(responseData.detail)) {
+            // Если детали ошибки в виде массива
+            const errorDetails = responseData.detail.map(item => 
+              `${item.loc.join('.')}: ${item.msg}`
+            ).join('; ');
+            
+            errorMessage = `Ошибка в данных заказа: ${errorDetails}`;
+          } else if (typeof responseData.detail === 'string') {
+            errorMessage = responseData.detail;
+          }
         }
       }
       
-      if (!success) {
-        throw new Error('Не удалось создать заказ ни по одному из адресов');
-      }
-      
-      // Обновляем корзину и счетчик
-      await refreshCart();
-      
-      setLoading(false);
-      setShowCheckoutForm(false);
-      navigate('/account');
-    } catch (error) {
-      console.error('Ошибка при оформлении заказа:', error);
-      setError('Не удалось оформить заказ. Пожалуйста, попробуйте позже.');
+      setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };
-
+  
+  // Функция для включения режима отладки
+  const toggleDebugMode = () => {
+    setDebugMode(!debugMode);
+  };
+  
   // Функция для форматирования цены
   const formatPrice = (price) => {
     // Если цена целое число, возвращаем без десятичной части
@@ -198,8 +441,30 @@ const Cart = () => {
     return sum + (item.product?.price || 0) * item.quantity;
   }, 0);
 
-  if (loading && !cartItems.length) {
+  if (loading) {
     return <div className="cart-container">Загрузка...</div>;
+  }
+  
+  // Показываем сообщение об успешном оформлении заказа
+  if (orderSuccess) {
+    return (
+      <div className="cart-container">
+        <div className="success-message">
+          <h2>Заказ успешно оформлен!</h2>
+          <p>Спасибо за ваш заказ. В ближайшее время с вами свяжется наш менеджер для подтверждения заказа.</p>
+          <p>Вы можете следить за статусом заказа в <a href="/account">личном кабинете</a>.</p>
+          <button 
+            onClick={() => {
+              setOrderSuccess(false);
+              navigate('/products');
+            }}
+            className="continue-shopping"
+          >
+            Продолжить покупки
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Показываем ошибку, но продолжаем отображать корзину, если есть товары
@@ -235,16 +500,55 @@ const Cart = () => {
     );
   }
 
+  // Отладочная панель
+  const debugPanel = debugMode && (
+    <div style={{ padding: '10px', marginBottom: '20px', border: '1px solid #ddd', background: '#f9f9f9' }}>
+      <h3>Отладочная информация</h3>
+      <p>Товаров в корзине: {cartItems.length}</p>
+      <p>Пользователь: {userProfile?.username || 'Не определен'} (ID: {userProfile?.id || 'Н/Д'})</p>
+      <p>Токен: {localStorage.getItem('token') ? 'Имеется' : 'Отсутствует'}</p>
+      <button 
+        onClick={async () => {
+          try {
+            await addItemsToServerCart();
+            alert('Корзина синхронизирована с сервером');
+          } catch (e) {
+            alert('Ошибка при синхронизации корзины: ' + e.message);
+          }
+        }} 
+        style={{ marginRight: '10px' }}
+      >
+        Синхронизировать корзину
+      </button>
+      <button onClick={() => setDebugMode(false)}>Скрыть отладку</button>
+    </div>
+  );
+
   if (cartItems.length === 0) {
     return (
       <div className="cart-container">
+        {debugMode ? debugPanel : (
+          <div style={{ textAlign: 'right', margin: '10px 0' }}>
+            <button 
+              onClick={toggleDebugMode}
+              style={{ background: 'none', border: 'none', fontSize: '12px', color: '#999', cursor: 'pointer' }}
+            >
+              ⚙️
+            </button>
+          </div>
+        )}
+        
         {showError}
         <div className="empty-cart">
           <h2>Ваша корзина пока пуста</h2>
-          <p>Добавьте свежую рыбу и морепродукты, чтобы оформить заказ</p>
+          <p>Добавьте товары, чтобы оформить заказ</p>
           <button onClick={() => navigate('/products')} className="continue-shopping">
             Перейти в каталог
           </button>
+        </div>
+        
+        <div className="cart-info" style={{ fontSize: '12px', color: '#777', marginTop: '20px', textAlign: 'center' }}>
+          <p>Пользователь: {userProfile?.username || 'Гость'} | {new Date().toISOString().slice(0, 19).replace('T', ' ')}</p>
         </div>
       </div>
     );
@@ -252,6 +556,17 @@ const Cart = () => {
 
   return (
     <div className="cart-container">
+      {debugMode ? debugPanel : (
+        <div style={{ textAlign: 'right', margin: '10px 0' }}>
+          <button 
+            onClick={toggleDebugMode}
+            style={{ background: 'none', border: 'none', fontSize: '12px', color: '#999', cursor: 'pointer' }}
+          >
+            ⚙️
+          </button>
+        </div>
+      )}
+      
       <h1>Ваша корзина</h1>
       
       {showError}
@@ -344,6 +659,10 @@ const Cart = () => {
         >
           Продолжить покупки
         </button>
+      </div>
+      
+      <div className="cart-info" style={{ fontSize: '12px', color: '#777', marginTop: '20px', textAlign: 'center' }}>
+        <p>Пользователь: {userProfile?.username || 'Гость'} | {new Date().toISOString().slice(0, 19).replace('T', ' ')}</p>
       </div>
     </div>
   );

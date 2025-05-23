@@ -4,9 +4,10 @@ import { Link } from 'react-router-dom';
 interface MobileMenuProps {
     isOpen: boolean;
     setIsOpen: (isOpen: boolean) => void;
+    isAuthenticated?: boolean; // Добавлен опциональный параметр
 }
 
-const MobileMenu = ({ isOpen, setIsOpen }: MobileMenuProps) => {
+const MobileMenu = ({ isOpen, setIsOpen, isAuthenticated = false }: MobileMenuProps) => {
     // Функция закрытия меню
     const handleClose = () => {
         setIsOpen(false);
@@ -38,6 +39,9 @@ const MobileMenu = ({ isOpen, setIsOpen }: MobileMenuProps) => {
             window.removeEventListener('keydown', handleEsc);
         };
     }, [isOpen]);
+
+    // Получаем имя пользователя для отображения
+    const username = localStorage.getItem('username') || '';
 
     return (
         <>
@@ -79,6 +83,27 @@ const MobileMenu = ({ isOpen, setIsOpen }: MobileMenuProps) => {
                         </svg>
                     </button>
                 </div>
+
+                {/* Блок пользователя (если авторизован) */}
+                {isAuthenticated && username && (
+                    <div className="p-4 bg-gray-50 border-b border-gray-200">
+                        <div className="flex items-center">
+                            <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center text-lg font-bold mr-3">
+                                {username.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <div className="font-semibold text-gray-800">{username}</div>
+                                <Link 
+                                    to="/account" 
+                                    className="text-sm text-blue-600 hover:text-blue-800"
+                                    onClick={handleClose}
+                                >
+                                    Личный кабинет
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <nav className="p-4">
                     <ul className="space-y-4">
@@ -136,6 +161,60 @@ const MobileMenu = ({ isOpen, setIsOpen }: MobileMenuProps) => {
                                 КОНТАКТЫ
                             </Link>
                         </li>
+
+                        {/* Добавляем пункты для входа/выхода в зависимости от статуса аутентификации */}
+                        {isAuthenticated ? (
+                            <>
+                                <li>
+                                    <Link
+                                        to="/account"
+                                        className="block text-gray-700 hover:text-blue-800 font-medium uppercase"
+                                        onClick={handleClose}
+                                    >
+                                        ЛИЧНЫЙ КАБИНЕТ
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link
+                                        to="/cart"
+                                        className="block text-gray-700 hover:text-blue-800 font-medium uppercase"
+                                        onClick={handleClose}
+                                    >
+                                        КОРЗИНА
+                                    </Link>
+                                </li>
+                                <li>
+                                    <button
+                                        onClick={() => {
+                                            // Функция выхода из системы
+                                            localStorage.removeItem('token');
+                                            localStorage.removeItem('tokenType');
+                                            localStorage.removeItem('userId');
+                                            localStorage.removeItem('username');
+                                            localStorage.removeItem('userEmail');
+                                            localStorage.removeItem('userPhone');
+                                            localStorage.removeItem('userFullName');
+                                            // Перезагружаем страницу для обновления состояния
+                                            window.location.href = '/';
+                                            handleClose();
+                                        }}
+                                        className="block text-red-600 hover:text-red-800 font-medium uppercase"
+                                    >
+                                        ВЫЙТИ
+                                    </button>
+                                </li>
+                            </>
+                        ) : (
+                            <li>
+                                <Link
+                                    to="/auth"
+                                    className="block text-gray-700 hover:text-blue-800 font-medium uppercase"
+                                    onClick={handleClose}
+                                >
+                                    ВОЙТИ / РЕГИСТРАЦИЯ
+                                </Link>
+                            </li>
+                        )}
                     </ul>
                 </nav>
 

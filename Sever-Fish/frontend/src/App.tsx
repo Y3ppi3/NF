@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -24,7 +24,35 @@ function RequireAuth({ children }: { children: JSX.Element }) {
     const token = localStorage.getItem('token');
     const location = useLocation();
     
-    if (!token) {
+    // Проверяем срок действия токена
+    const isTokenValid = () => {
+        if (!token) return false;
+        
+        try {
+            // Декодируем JWT токен
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            
+            const payload = JSON.parse(jsonPayload);
+            
+            // Проверяем срок действия токена (exp указан в секундах)
+            if (payload.exp) {
+                const expirationTime = payload.exp * 1000; // переводим в миллисекунды
+                return Date.now() < expirationTime;
+            }
+            
+            // Если в токене нет информации о сроке действия, считаем его валидным
+            return true;
+        } catch (error) {
+            console.error('Ошибка при проверке токена:', error);
+            return false;
+        }
+    };
+    
+    if (!token || !isTokenValid()) {
         // Запоминаем текущий путь для перенаправления после авторизации
         localStorage.setItem('redirectAfterAuth', location.pathname);
         return <Navigate to="/auth" state={{ from: location }} replace />;
@@ -36,60 +64,84 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 function App() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [cartCount, setCartCount] = useState(0);
+    const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+    // Функция для проверки авторизации
+    const checkAuthentication = () => {
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+            setIsAuthenticated(false);
+            return false;
+        }
+        
+        try {
+            // Декодируем JWT токен
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            
+            const payload = JSON.parse(jsonPayload);
+            
+            // Проверяем срок действия токена (exp указан в секундах)
+            if (payload.exp) {
+                const expirationTime = payload.exp * 1000; // переводим в миллисекунды
+                const isValid = Date.now() < expirationTime;
+                
+                if (!isValid) {
+                    // Если токен просрочен, очищаем localStorage
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('tokenType');
+                    setIsAuthenticated(false);
+                    return false;
+                }
+            }
+            
+            setIsAuthenticated(true);
+            return true;
+        } catch (error) {
+            console.error('Ошибка при проверке токена:', error);
+            setIsAuthenticated(false);
+            return false;
+        }
+    };
 
     // Функция для обновления счетчика корзины
-    const updateCartCount = async () => {
+    const updateCartCount = () => {
         try {
-            const token = localStorage.getItem('token');
-            const tokenType = localStorage.getItem('tokenType') || 'Bearer';
-            
-            if (!token) {
+            // Проверяем авторизацию
+            if (!checkAuthentication()) {
                 setCartCount(0);
                 return;
             }
             
-            // Пробуем получить данные корзины
-            const response = await axios.get(`${API_BASE_URL}/api/cart`, {
-                headers: { 'Authorization': `${tokenType} ${token}` }
-            });
-            
-            // Проверяем формат данных
-            const data = response.data;
-            
-            if (data && Array.isArray(data.items)) {
-                // Если data.items - массив, используем его
-                setCartCount(data.items.reduce((sum, item) => sum + item.quantity, 0));
-            } else if (data && typeof data === 'object') {
-                // Если data - объект, но не с ожидаемой структурой, ищем другие поля
-                if (Array.isArray(data.cart_items)) {
-                    setCartCount(data.cart_items.reduce((sum, item) => sum + item.quantity, 0));
-                } else if (data.total_items !== undefined) {
-                    // Если есть поле total_items, используем его
-                    setCartCount(data.total_items);
-                } else {
-                    // Иначе устанавливаем 0
-                    console.log("Формат данных корзины не содержит ожидаемых полей:", data);
-                    setCartCount(0);
+            // Получаем данные корзины из localStorage
+            const cartDataString = localStorage.getItem('cart');
+            if (cartDataString) {
+                try {
+                    const cartData = JSON.parse(cartDataString);
+                    if (Array.isArray(cartData)) {
+                        // Считаем общее количество товаров
+                        const count = cartData.reduce((sum, item) => sum + (item.quantity || 1), 0);
+                        setCartCount(count);
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Ошибка при парсинге корзины из localStorage:', e);
                 }
-            } else {
-                // Если data не соответствует ожидаемой структуре, устанавливаем 0
-                console.log("Неожиданный формат данных корзины:", data);
-                setCartCount(0);
             }
+            
+            // Если корзина не найдена или пуста
+            setCartCount(0);
         } catch (error) {
-            console.error("Ошибка при загрузке корзины:", error);
-            // Если ошибка 401 (Unauthorized), сбрасываем данные авторизации
-            if (axios.isAxiosError(error) && error.response?.status === 401) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('tokenType');
-                localStorage.removeItem('userId');
-                localStorage.removeItem('username');
-            }
+            console.error("Ошибка при обновлении счетчика корзины:", error);
             setCartCount(0);
         }
     };
   
-    // Функция для переключения меню (четко определенная)
+    // Функция для переключения меню
     const toggleMobileMenu = () => {
         setIsMobileMenuOpen(prevState => !prevState);
     };
@@ -122,6 +174,7 @@ function App() {
                 if (axios.isAxiosError(error) && error.response?.status === 401) {
                     // Если сервер ответил 401, пользователь не авторизован
                     console.log('Ошибка авторизации, перенаправление на страницу входа');
+                    // НЕ очищаем токен здесь, чтобы не вызывать цикл обновлений
                 }
                 return Promise.reject(error);
             }
@@ -134,9 +187,27 @@ function App() {
         };
     }, []);
 
-    // Обновляем корзину при загрузке приложения
+    // Инициализация состояния аутентификации и корзины
     useEffect(() => {
+        checkAuthentication();
         updateCartCount();
+        
+        // Настраиваем обработчик для события storage,
+        // чтобы обновлять состояние при изменении localStorage в другой вкладке
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'token' || e.key === null) {
+                checkAuthentication();
+                updateCartCount();
+            } else if (e.key === 'cart') {
+                updateCartCount();
+            }
+        };
+        
+        window.addEventListener('storage', handleStorageChange);
+        
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+        };
     }, []);
 
     // Управление классом body для мобильного меню
@@ -153,16 +224,22 @@ function App() {
 
     // Проверяем, нужно ли перенаправить пользователя после авторизации
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        const redirectPath = localStorage.getItem('redirectAfterAuth');
-        
-        if (token && redirectPath) {
-            // Очищаем информацию о перенаправлении
-            localStorage.removeItem('redirectAfterAuth');
-            // Обновляем количество товаров в корзине
-            updateCartCount();
+        if (isAuthenticated) {
+            const redirectPath = localStorage.getItem('redirectAfterAuth');
+            
+            if (redirectPath) {
+                // Очищаем информацию о перенаправлении
+                localStorage.removeItem('redirectAfterAuth');
+                // Обновляем количество товаров в корзине
+                updateCartCount();
+            }
         }
-    }, []);
+    }, [isAuthenticated]);
+
+    // Показываем загрузку, пока не определили состояние аутентификации
+    if (isAuthenticated === null) {
+        return <div className="app-loading">Загрузка...</div>;
+    }
 
     return (
         <Router>
@@ -170,6 +247,7 @@ function App() {
                 onMenuToggle={toggleMobileMenu} 
                 cartCount={cartCount} 
                 updateCartCount={updateCartCount} 
+                isAuthenticated={isAuthenticated}
             />
             <Routes>
                 <Route path="/" element={<Home />} />
@@ -194,7 +272,13 @@ function App() {
                 <Route path="/contacts" element={<Contacts />} />
                 <Route path="/recipes" element={<Recipes />} />
                 <Route path="/production" element={<Production />} />
-                <Route path="/auth" element={<Auth />} />
+                
+                {/* Страница авторизации с проверкой, если уже авторизован */}
+                <Route path="/auth" element={
+                    isAuthenticated ? 
+                        <Navigate to="/account" replace /> : 
+                        <Auth />
+                } />
                 
                 {/* Перенаправление для несуществующих маршрутов */}
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -204,6 +288,7 @@ function App() {
             <MobileMenu 
                 isOpen={isMobileMenuOpen} 
                 setIsOpen={setIsMobileMenuOpen} 
+                isAuthenticated={isAuthenticated}
             />
         </Router>
     );

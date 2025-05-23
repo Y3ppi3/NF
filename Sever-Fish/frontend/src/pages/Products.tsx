@@ -18,39 +18,35 @@ const Products = ({ updateCartCount }) => {
   
   // Исправленные пути API согласно FastAPI маршрутам
   const PRODUCTS_API = `${API_BASE_URL}/products`;
-  const CATEGORIES_API = `${API_BASE_URL}/products/categories`;
   const CART_API = `${API_BASE_URL}/cart`;
 
-  // Функция для проверки доступных API маршрутов
-  const checkApiEndpoints = async () => {
-    try {
-      const routesRes = await axios.get(`${API_BASE_URL}/routes`);
-      console.log("Доступные маршруты API:", routesRes.data);
-      return routesRes.data;
-    } catch (error) {
-      console.error("Ошибка при получении маршрутов API:", error);
-      return null;
-    }
-  };
+  // Константа для URL заглушки, если изображения не найдены
+  const PLACEHOLDER_IMAGE = "/images/fish-placeholder.jpg";
+
+  // Фиксированные категории из базы данных
+  const DB_CATEGORIES = [
+    { id: "1", name: "Консервы", description: "Рыбные консервы разных видов" },
+    { id: "2", name: "Икра", description: "Икра различных видов рыб" },
+    { id: "3", name: "Деликатесы", description: "Рыбные деликатесы премиум-класса" },
+    { id: "4", name: "Свежая рыба", description: "Свежая охлажденная рыба" },
+    { id: "5", name: "Замороженная рыба", description: "Свежемороженая рыба различных видов" },
+    { id: "6", name: "Морепродукты", description: "Различные виды морепродуктов" },
+    { id: "7", name: "Полуфабрикаты", description: "Рыбные полуфабрикаты готовые к приготовлению" },
+    { id: "8", name: "Копчёная рыба", description: "Рыба холодного и горячего копчения" }
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       
-      // Проверяем доступные маршруты API
-      await checkApiEndpoints();
-      
-      // Проверяем статус сервера
       try {
-        const healthRes = await axios.get(`${API_BASE_URL}/health`);
-        console.log("Статус сервера:", healthRes.data);
-      } catch (healthErr) {
-        console.error("Ошибка при проверке статуса:", healthErr);
-      }
-      
-      try {
-        await Promise.all([fetchProducts(), fetchCategories()]);
+        // Загружаем продукты из API
+        await fetchProducts();
+        
+        // Используем фиксированные категории
+        console.log("Использование фиксированных категорий из БД:", DB_CATEGORIES);
+        setCategories(DB_CATEGORIES);
       } catch (err) {
         console.error("Ошибка загрузки данных:", err);
       } finally {
@@ -79,72 +75,48 @@ const Products = ({ updateCartCount }) => {
           timeout: 10000
         });
         console.log("Получены продукты:", res.data);
-        setProducts(res.data);
+        
+        // Обработка полученных данных
+        const processedProducts = processProducts(res.data);
+        setProducts(processedProducts);
         setError(null);
-        return res.data;
+        return processedProducts;
       } catch (error) {
         console.error(`Ошибка при запросе к ${api}:`, error);
         // Продолжаем пробовать другие API
       }
     }
     
-    // Если все попытки не удались, устанавливаем ошибку
-    setError("Не удалось загрузить товары. Проверьте работу сервера.");
+    // Если все попытки не удались
+    setError("Не удалось загрузить товары с сервера. Пожалуйста, попробуйте позже.");
     return [];
   };
 
-  const fetchCategories = async () => {
-    // Список возможных API маршрутов для категорий
-    const categoryApis = [
-      CATEGORIES_API,
-      `${API_BASE_URL}/api/categories`,
-      `${API_BASE_URL}/categories`
-    ];
-    
-    for (const api of categoryApis) {
-      try {
-        console.log(`Попытка запроса категорий по адресу: ${api}`);
-        const res = await axios.get(api, {
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        });
-        
-        console.log("Получены категории:", res.data);
-        
-        // Обработка данных для совместимости
-        const processedCategories = res.data.map(cat => {
-          // Убедимся, что каждая категория имеет slug
-          if (!cat.slug && cat.name) {
-            cat.slug = cat.name.toLowerCase().replace(/\s+/g, '-');
-          }
-          return cat;
-        });
-        
-        setCategories(processedCategories);
-        setError(null);
-        return processedCategories;
-      } catch (error) {
-        console.error(`Ошибка при запросе к ${api}:`, error);
-        // Продолжаем пробовать другие API
+  // Функция для обработки данных о продуктах
+  const processProducts = (products) => {
+    return products.map(product => {
+      // Преобразуем category_id в строку, если это необходимо
+      if (product.category_id !== undefined && product.category_id !== null) {
+        product.category_id = product.category_id.toString();
       }
-    }
-    
-    // Если все попытки не удались, устанавливаем ошибку
-    setError("Не удалось загрузить категории. Проверьте работу сервера.");
-    return [];
+      
+      // Полный путь к изображению, если оно не начинается с / или http
+      if (product.image_url && !product.image_url.startsWith('http') && !product.image_url.startsWith('/')) {
+        product.image_url = '/' + product.image_url;
+      }
+      
+      return product;
+    });
   };
 
-  // ИСПРАВЛЕНИЕ: Правильное определение функции fetchProductsByCategory
-  const fetchProductsByCategory = async (categorySlug) => {
+  // Функция для получения продуктов по категории
+  const fetchProductsByCategory = async (categoryId) => {
     setIsLoading(true);
     
     // Список возможных API маршрутов для продуктов по категории
     const categoryProductApis = [
-      `${API_BASE_URL}/products/category/${categorySlug}`,
-      `${API_BASE_URL}/api/products/category/${categorySlug}`
+      `${API_BASE_URL}/products/category/${categoryId}`,
+      `${API_BASE_URL}/api/products/category/${categoryId}`
     ];
     
     for (const api of categoryProductApis) {
@@ -158,7 +130,10 @@ const Products = ({ updateCartCount }) => {
           timeout: 10000
         });
         console.log("Получены продукты по категории:", res.data);
-        setProducts(res.data);
+        
+        // Обработка полученных данных
+        const processedProducts = processProducts(res.data);
+        setProducts(processedProducts);
         setError(null);
         setIsLoading(false);
         return;
@@ -168,28 +143,55 @@ const Products = ({ updateCartCount }) => {
       }
     }
     
-    // Если не удалось получить товары по категории, пробуем загрузить все товары
-    try {
-      setError("Не удалось загрузить товары по выбранной категории. Загружаем все товары.");
-      await fetchProducts();
-    } catch (e) {
-      console.error("Также не удалось загрузить все товары:", e);
-    } finally {
-      setIsLoading(false);
+    // Если не удалось получить товары по API, фильтруем имеющиеся
+    const filteredProducts = products.filter(p => 
+      p.category_id === categoryId
+    );
+    
+    if (filteredProducts.length > 0) {
+      setProducts(filteredProducts);
+    } else {
+      await fetchProducts(); // Загружаем все продукты
+      // Фильтруем по категории на стороне клиента
+      const newFilteredProducts = products.filter(p => 
+        p.category_id === categoryId
+      );
+      if (newFilteredProducts.length > 0) {
+        setProducts(newFilteredProducts);
+      } else {
+        setError(`Не удалось найти товары в категории ${categoryId}`);
+      }
     }
+    
+    setIsLoading(false);
   };
 
   const handleCategorySelect = async (category) => {
     setSelectedCategory(category.id);
     setCurrentPage(1);
+    setIsLoading(true);
     
-    if (category.slug) {
-      await fetchProductsByCategory(category.slug);
-    } else {
-      await fetchProducts();
+    try {
+      // Фильтруем имеющиеся продукты по категории
+      const filteredProducts = products.filter(p => 
+        p.category_id === category.id
+      );
+      
+      if (filteredProducts.length > 0) {
+        setProducts(filteredProducts);
+        setIsLoading(false);
+      } else {
+        // Если нет продуктов в этой категории, пробуем загрузить с сервера
+        await fetchProductsByCategory(category.id);
+      }
+    } catch (error) {
+      console.error("Ошибка при выборе категории:", error);
+      setError("Не удалось загрузить товары выбранной категории");
+      setIsLoading(false);
     }
   };
 
+  // Функция для добавления товара в корзину
   const addToCart = async (productId, event) => {
     event.preventDefault(); // Предотвращаем переход по ссылке
     
@@ -204,60 +206,109 @@ const Products = ({ updateCartCount }) => {
       return;
     }
     
-    // Список возможных API маршрутов для корзины
-    const cartApis = [
-      CART_API,
-      `${API_BASE_URL}/api/cart`
-    ];
-    
     const button = event.currentTarget;
     // Анимация для кнопки
     button.innerText = "Добавляем...";
     button.classList.add("bg-yellow-600");
     
-    for (const api of cartApis) {
-      try {
-        console.log(`Добавление товара ${productId} в корзину по адресу: ${api}`);
-        await axios.post(api, {
+    try {
+      // Получаем текущую корзину из localStorage
+      const cartDataString = localStorage.getItem('cart');
+      let cartData = [];
+      
+      if (cartDataString) {
+        try {
+          cartData = JSON.parse(cartDataString);
+        } catch (e) {
+          console.error('Ошибка при парсинге корзины из localStorage:', e);
+          cartData = [];
+        }
+      }
+      
+      // Находим продукт, который добавляем в корзину
+      const product = products.find(p => p.id === productId);
+      
+      if (!product) {
+        throw new Error('Товар не найден');
+      }
+      
+      // Проверяем, есть ли уже этот товар в корзине
+      const existingItemIndex = cartData.findIndex(item => item.product_id === productId);
+      
+      if (existingItemIndex >= 0) {
+        // Если товар уже есть в корзине, увеличиваем количество
+        cartData[existingItemIndex].quantity += 1;
+      } else {
+        // Если товара нет в корзине, добавляем его
+        cartData.push({
+          id: Date.now(), // Используем timestamp как id
           product_id: productId,
           quantity: 1,
-        }, {
-          headers: {
-            'Authorization': `${tokenType} ${token}`,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
+          product: product
         });
-        
-        // Обновляем счетчик корзины
-        if (updateCartCount) {
-          updateCartCount();
-        }
-        
-        // Изменяем текст кнопки на успешный
-        button.innerText = "Добавлено ✓";
-        button.classList.remove("bg-yellow-600");
-        button.classList.add("bg-green-600");
-        
-        // Возвращаем исходный текст после короткой задержки
-        setTimeout(() => {
-          button.innerText = "В корзину";
-          button.classList.remove("bg-green-600");
-        }, 1500);
-        
-        return;
-      } catch (error) {
-        console.error(`Ошибка при добавлении в корзину по ${api}:`, error);
-        // Продолжаем пробовать другие API
       }
+      
+      // Сохраняем обновленную корзину в localStorage
+      localStorage.setItem('cart', JSON.stringify(cartData));
+      
+      // Также пробуем отправить на сервер
+      try {
+        // Список возможных API маршрутов для корзины
+        const cartApis = [
+          CART_API,
+          `${API_BASE_URL}/api/cart`
+        ];
+        
+        for (const api of cartApis) {
+          try {
+            console.log(`Добавление товара ${productId} в корзину по адресу: ${api}`);
+            await axios.post(api, {
+              product_id: productId,
+              quantity: 1,
+            }, {
+              headers: {
+                'Authorization': `${tokenType} ${token}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+              }
+            });
+            console.log("Товар успешно добавлен в корзину на сервере");
+            break;
+          } catch (apiError) {
+            console.error(`Ошибка при добавлении в корзину по ${api}:`, apiError);
+            // Продолжаем пробовать другие API
+          }
+        }
+      } catch (serverError) {
+        console.error("Не удалось добавить товар в корзину на сервере:", serverError);
+        // Продолжаем работу с локальной корзиной
+      }
+      
+      // Обновляем счетчик корзины
+      if (updateCartCount) {
+        updateCartCount();
+      }
+      
+      // Изменяем текст кнопки на успешный
+      button.innerText = "Добавлено ✓";
+      button.classList.remove("bg-yellow-600");
+      button.classList.add("bg-green-600");
+      
+      // Возвращаем исходный текст после короткой задержки
+      setTimeout(() => {
+        button.innerText = "В корзину";
+        button.classList.remove("bg-green-600");
+      }, 1500);
+    } catch (error) {
+      console.error("Ошибка при добавлении товара в корзину:", error);
+      
+      // Сбрасываем кнопку и показываем ошибку
+      button.innerText = "В корзину";
+      button.classList.remove("bg-yellow-600");
+      
+      // Показываем ошибку пользователю
+      setError("Не удалось добавить товар в корзину. Проверьте соединение с сервером.");
     }
-    
-    // Сбрасываем кнопку и показываем ошибку
-    button.innerText = "В корзину";
-    button.classList.remove("bg-yellow-600");
-    
-    // Показываем ошибку пользователю
-    setError("Не удалось добавить товар в корзину. Проверьте соединение с сервером.");
   };
 
   // Обработчик для перехода на страницу авторизации
@@ -267,8 +318,9 @@ const Products = ({ updateCartCount }) => {
     navigate('/auth');
   };
 
+  // Расчет текущих отображаемых продуктов
   const filteredProducts = selectedCategory
-    ? products.filter((p) => p.category_id?.toString() === selectedCategory)
+    ? products.filter((p) => p.category_id === selectedCategory)
     : products;
 
   const lastProductIndex = currentPage * productsPerPage;
@@ -277,6 +329,7 @@ const Products = ({ updateCartCount }) => {
 
   const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
 
+  // Функция для генерации диапазона пагинации
   const getPaginationRange = () => {
     const delta = 2;
     let range = [];
@@ -305,6 +358,19 @@ const Products = ({ updateCartCount }) => {
     return result;
   };
 
+  // Функция для форматирования цены
+  const formatPrice = (price) => {
+    if (!price) return "0 ₽";
+    return `${price.toLocaleString()} ₽`;
+  };
+
+  // Функция для возврата к отображению всех продуктов
+  const handleShowAllProducts = () => {
+    setSelectedCategory("");
+    setCurrentPage(1);
+    fetchProducts();
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 my-8">
       <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">Каталог продукции</h1>
@@ -323,14 +389,6 @@ const Products = ({ updateCartCount }) => {
         </div>
       )}
       
-      {/* Отладочный блок - можно удалить в продакшен */}
-      <div className="bg-gray-100 border border-gray-300 rounded p-3 mb-6 text-xs">
-        <p><strong>Адрес API:</strong> {API_BASE_URL}</p>
-        <p><strong>Маршрут продуктов:</strong> {PRODUCTS_API}</p>
-        <p><strong>Маршрут категорий:</strong> {CATEGORIES_API}</p>
-        <p><strong>Последнее обновление:</strong> {new Date().toLocaleTimeString()}</p>
-      </div>
-      
       <div className="flex flex-col lg:flex-row gap-8">
         {/* Боковая панель с категориями */}
         <aside className="lg:w-1/4">
@@ -339,11 +397,7 @@ const Products = ({ updateCartCount }) => {
             <ul className="space-y-1">
               <li>
                 <button 
-                  onClick={() => {
-                    setSelectedCategory("");
-                    setCurrentPage(1);
-                    fetchProducts();
-                  }}
+                  onClick={handleShowAllProducts}
                   className={`w-full text-left py-2 px-3 rounded transition-colors ${
                     selectedCategory === "" 
                     ? "bg-blue-50 text-blue-800 font-medium" 
@@ -359,7 +413,7 @@ const Products = ({ updateCartCount }) => {
                     <button 
                       onClick={() => handleCategorySelect(cat)}
                       className={`w-full text-left py-2 px-3 rounded transition-colors ${
-                        selectedCategory === cat.id?.toString() 
+                        selectedCategory === cat.id
                         ? "bg-blue-50 text-blue-800 font-medium" 
                         : "text-gray-700 hover:bg-gray-100"
                       }`}
@@ -398,6 +452,18 @@ const Products = ({ updateCartCount }) => {
                 </div>
               ) : (
                 <>
+                  {/* Заголовок категории */}
+                  {selectedCategory && (
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-semibold text-gray-800">
+                        {categories.find(c => c.id === selectedCategory)?.name || "Категория"}
+                      </h2>
+                      <p className="text-gray-600">
+                        {categories.find(c => c.id === selectedCategory)?.description || ""}
+                      </p>
+                    </div>
+                  )}
+                  
                   {/* Сетка продуктов */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {currentProducts.map((product) => (
@@ -405,11 +471,11 @@ const Products = ({ updateCartCount }) => {
                         <Link to={`/products/${product.id}`} className="block relative">
                           <div className="h-48 overflow-hidden">
                             <img
-                              src={product.image_url || "/placeholder.jpg"}
+                              src={product.image_url || PLACEHOLDER_IMAGE}
                               alt={product.name}
                               className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                               onError={(e) => {
-                                e.target.src = "/placeholder.jpg";
+                                e.target.src = PLACEHOLDER_IMAGE;
                                 e.target.onerror = null;
                               }}
                             />
@@ -417,13 +483,21 @@ const Products = ({ updateCartCount }) => {
                           <div className="p-4">
                             <h3 className="font-medium text-gray-800 text-lg mb-1 line-clamp-2">{product.name}</h3>
                             <p className="text-gray-500 text-sm mb-3 line-clamp-2">{product.description || "Без описания"}</p>
+                            
+                            {product.weight && (
+                              <div className="text-gray-600 text-sm mb-2">
+                                Вес: {product.weight}
+                              </div>
+                            )}
+                            
                             <div className="flex justify-between items-center">
-                              <span className="text-lg font-bold text-blue-800">{product.price?.toLocaleString()} ₽</span>
+                              <span className="text-lg font-bold text-blue-800">{formatPrice(product.price)}</span>
                               <button
                                 onClick={(e) => addToCart(product.id, e)}
                                 className="bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors"
+                                disabled={product.stock_quantity <= 0}
                               >
-                                В корзину
+                                {product.stock_quantity <= 0 ? "Нет в наличии" : "В корзину"}
                               </button>
                             </div>
                           </div>

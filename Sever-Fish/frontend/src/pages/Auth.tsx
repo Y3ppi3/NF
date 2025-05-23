@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // Интерфейсы для форм
 interface RegisterFormData {
-  email: string;
   phone: string;
-  full_name: string;
+  email: string;
+  name: string;
   password: string;
   password_confirm: string;
 }
 
 interface LoginFormData {
-  username: string; // Изменено с phone на username для поддержки входа как по почте, так и по телефону
+  email: string; // Изменено с username на email
   password: string;
 }
 
@@ -23,16 +23,16 @@ const Auth: React.FC = () => {
 
   // Форма регистрации
   const [registerForm, setRegisterForm] = useState<RegisterFormData>({
-    email: '',
     phone: '',
-    full_name: '',
+    email: '',
+    name: '',
     password: '',
     password_confirm: ''
   });
 
   // Форма входа
   const [loginForm, setLoginForm] = useState<LoginFormData>({
-    username: '',
+    email: '', // Изменено с username на email
     password: ''
   });
 
@@ -79,16 +79,23 @@ const Auth: React.FC = () => {
     const formattedValue = formatPhoneNumber(value);
     
     if (isLogin) {
-      setLoginForm({
-        ...loginForm,
-        username: formattedValue
-      });
+      // Больше не используется для формы входа, так как мы используем email
     } else {
       setRegisterForm({
         ...registerForm,
         phone: formattedValue
       });
     }
+  };
+
+  // Генерация случайного строкового идентификатора
+  const generateRandomString = (length = 8) => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   };
 
   // Обработчик регистрации
@@ -107,22 +114,43 @@ const Auth: React.FC = () => {
     // Очищаем номер телефона от форматирования
     const phoneNumber = registerForm.phone.replace(/\D/g, '');
     
-    // Проверка на пустой email
-    if (!registerForm.email.trim()) {
-      setError('Email обязателен для заполнения');
+    // Проверка на пустой телефон
+    if (!phoneNumber.trim() || phoneNumber.length < 11) {
+      setError('Введите корректный номер телефона');
       setLoading(false);
       return;
     }
     
-    // Генерируем уникальное имя пользователя на основе email и случайных цифр
-    // для избежания конфликтов
-    const randomSuffix = Math.floor(Math.random() * 1000);
-    const username = `${registerForm.email.split('@')[0]}${randomSuffix}`;
+    // Проверка на корректность email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!registerForm.email.trim() || !emailRegex.test(registerForm.email)) {
+      setError('Введите корректный email');
+      setLoading(false);
+      return;
+    }
+    
+    // Удалена проверка на пустое имя
 
     try {
       const url = 'http://127.0.0.1:8000/auth/register';
       
       console.log("URL для регистрации:", url);
+      
+      // Добавляем случайный суффикс к имени для уникальности в базе данных
+      // Это решение временное, пока не изменена схема БД
+      const uniqueUsername = registerForm.name 
+        ? `${registerForm.name}_${generateRandomString(6)}` 
+        : `user_${phoneNumber}_${generateRandomString(6)}`;
+      
+      // Создаем запрос на регистрацию
+      const requestBody = {
+        name: uniqueUsername, // Используем уникальное имя
+        password: registerForm.password,
+        email: registerForm.email,
+        phone: phoneNumber
+      };
+      
+      console.log("Отправляемые данные:", requestBody);
       
       const response = await fetch(url, {
         method: 'POST',
@@ -130,13 +158,7 @@ const Auth: React.FC = () => {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          username: username,
-          password: registerForm.password,
-          email: registerForm.email,
-          phone: phoneNumber,
-          full_name: registerForm.full_name
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       // Отладочное сообщение для проверки статуса ответа
@@ -157,7 +179,21 @@ const Auth: React.FC = () => {
       }
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Ошибка при регистрации');
+        // Более подробная обработка ошибок
+        if (data.detail && Array.isArray(data.detail)) {
+          // Если сервер возвращает массив ошибок (как в примере с missing field)
+          const errorMessages = data.detail.map((err: any) => {
+            if (err.type === "missing" && err.loc) {
+              return `Отсутствует обязательное поле: ${err.loc[err.loc.length - 1]}`;
+            }
+            return err.msg || "Неизвестная ошибка";
+          });
+          throw new Error(errorMessages.join(", "));
+        } else if (data.detail) {
+          throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+        } else {
+          throw new Error('Ошибка при регистрации');
+        }
       }
 
       // После успешной регистрации переходим на форму входа
@@ -165,11 +201,11 @@ const Auth: React.FC = () => {
       
       // Заполняем поля формы входа данными из регистрации для удобства
       setLoginForm({
-        username: registerForm.email, // Используем email для входа
+        email: registerForm.email, // Используем email для входа
         password: registerForm.password
       });
       
-      alert('Регистрация успешна! Теперь вы можете войти в систему используя email или телефон.');
+      alert('Регистрация успешна! Теперь вы можете войти в систему используя свой email.');
     } catch (error) {
       console.error("Ошибка регистрации:", error);
       if (error instanceof Error) {
@@ -188,14 +224,6 @@ const Auth: React.FC = () => {
     setError(null);
     setLoading(true);
 
-    // Определяем, что ввел пользователь (email, телефон или username)
-    let usernameValue = loginForm.username;
-    
-    // Если это телефон, очищаем от форматирования
-    if (usernameValue.includes('+7')) {
-      usernameValue = usernameValue.replace(/\D/g, '');
-    }
-
     try {
       const url = 'http://127.0.0.1:8000/auth/login';
       
@@ -208,7 +236,7 @@ const Auth: React.FC = () => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          username: usernameValue,
+          email: loginForm.email, // Изменено с username на email
           password: loginForm.password
         }),
       });
@@ -231,32 +259,32 @@ const Auth: React.FC = () => {
       }
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Ошибка при входе');
+        // Более детальная обработка ошибок
+        if (data.detail && Array.isArray(data.detail)) {
+          const errorMessages = data.detail.map((err: any) => {
+            return err.msg || "Неизвестная ошибка";
+          });
+          throw new Error(errorMessages.join(", "));
+        } else if (data.detail) {
+          throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+        } else {
+          throw new Error('Ошибка при входе');
+        }
       }
 
       // Сохраняем токен и данные пользователя в localStorage
       localStorage.setItem('token', data.access_token);
       localStorage.setItem('tokenType', data.token_type);
-      localStorage.setItem('userId', data.user.id);
-      localStorage.setItem('username', data.user.username);
       
-      // Дополнительно сохраняем другие данные пользователя для использования без запроса к API
-      if (data.user.email) localStorage.setItem('userEmail', data.user.email);
-      if (data.user.phone) localStorage.setItem('userPhone', data.user.phone);
-      if (data.user.full_name) localStorage.setItem('userFullName', data.user.full_name);
-
-      // Проверяем, есть ли сохраненный путь для перенаправления
-      const redirectPath = localStorage.getItem('redirectAfterAuth');
+      // Даже если в данных нет информации о пользователе, мы все равно авторизуем его
+      // и перенаправляем на страницу аккаунта
       
-      if (redirectPath) {
-        // Очищаем сохраненный путь
-        localStorage.removeItem('redirectAfterAuth');
-        // Перенаправляем на сохраненный путь
-        navigate(redirectPath);
-      } else {
-        // Перенаправляем на страницу аккаунта если нет сохраненного пути
-        navigate('/account');
-      }
+      // Нужна небольшая задержка перед перенаправлением, чтобы токен успел сохраниться
+      setTimeout(() => {
+        // Всегда перенаправляем на страницу аккаунта после успешного входа
+        navigate('/account', { replace: true });
+      }, 100);
+      
     } catch (error) {
       console.error("Ошибка входа:", error);
       if (error instanceof Error) {
@@ -264,7 +292,6 @@ const Auth: React.FC = () => {
       } else {
         setError('Произошла ошибка при входе');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -297,16 +324,16 @@ const Auth: React.FC = () => {
         {isLoginMode ? (
           <form onSubmit={handleLogin} className="auth-form">
             <div className="form-group">
-              <label htmlFor="username">Email или телефон</label>
+              <label htmlFor="email">Email</label>
               <input
-                type="text"
-                id="username"
-                name="username"
-                value={loginForm.username}
+                type="email"
+                id="email"
+                name="email"
+                value={loginForm.email}
                 onChange={handleLoginInputChange}
-                placeholder="Введите email или телефон"
+                placeholder="example@mail.com"
                 required
-                autoComplete="username"
+                autoComplete="email"
               />
             </div>
 
@@ -335,15 +362,14 @@ const Auth: React.FC = () => {
         ) : (
           <form onSubmit={handleRegister} className="auth-form">
             <div className="form-group">
-              <label htmlFor="full_name">ФИО</label>
+              <label htmlFor="name">Имя</label>
               <input
                 type="text"
-                id="full_name"
-                name="full_name"
-                value={registerForm.full_name}
+                id="name"
+                name="name"
+                value={registerForm.name}
                 onChange={handleRegisterInputChange}
-                placeholder="Иванов Иван Иванович"
-                required
+                placeholder="Введите ваше имя"
                 autoComplete="name"
               />
             </div>
@@ -361,7 +387,7 @@ const Auth: React.FC = () => {
                 autoComplete="tel"
               />
             </div>
-
+            
             <div className="form-group">
               <label htmlFor="email">Email</label>
               <input
@@ -420,27 +446,27 @@ const Auth: React.FC = () => {
       <style dangerouslySetInnerHTML={{__html: `
         /* Стили для страницы авторизации и регистрации */
         .auth-container {
-          max-width: 500px;
-          margin: 40px auto;
-          padding: 0 15px;
+          max-width: 380px; /* Уменьшил ширину для компактности */
+          margin: 20px auto; /* Уменьшил отступы */
+          padding: 0 10px;
         }
 
         .auth-card {
           background-color: #ffffff;
           border-radius: 8px;
           box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-          padding: 30px;
+          padding: 20px; /* Уменьшил внутренние отступы */
         }
 
         .auth-header {
           text-align: center;
-          margin-bottom: 25px;
+          margin-bottom: 15px; /* Уменьшил отступы */
         }
 
         .auth-header h1 {
           color: #1a3a5c;
-          font-size: 24px;
-          margin-bottom: 20px;
+          font-size: 20px; /* Уменьшил размер шрифта */
+          margin-bottom: 12px; /* Уменьшил отступы */
         }
 
         .auth-mode-switch {
@@ -449,14 +475,14 @@ const Auth: React.FC = () => {
           overflow: hidden;
           border: 1px solid #e0e8f0;
           margin: 0 auto;
-          max-width: 300px;
+          max-width: 240px; /* Уменьшил ширину */
         }
 
         .auth-mode-switch button {
           flex: 1;
           background: none;
           border: none;
-          padding: 12px 0;
+          padding: 8px 0; /* Уменьшил отступы */
           cursor: pointer;
           font-weight: 500;
           color: #647d98;
@@ -471,36 +497,37 @@ const Auth: React.FC = () => {
         .auth-error {
           background-color: #ffebee;
           color: #c62828;
-          padding: 12px;
+          padding: 8px; /* Уменьшил отступы */
           border-radius: 6px;
-          margin-bottom: 20px;
-          font-size: 14px;
+          margin-bottom: 12px; /* Уменьшил отступы */
+          font-size: 13px;
           text-align: center;
         }
 
         .auth-form {
           display: flex;
           flex-direction: column;
-          gap: 15px;
+          gap: 8px; /* Уменьшил отступы между полями */
         }
 
         .form-group {
           display: flex;
           flex-direction: column;
+          margin-bottom: 2px; /* Добавил меньший отступ между группами */
         }
 
         .form-group label {
-          margin-bottom: 6px;
-          font-size: 14px;
+          margin-bottom: 2px; /* Уменьшил отступы */
+          font-size: 13px;
           color: #647d98;
           font-weight: 500;
         }
 
         .form-group input {
-          padding: 12px;
+          padding: 8px; /* Уменьшил отступы */
           border: 1px solid #e0e8f0;
           border-radius: 6px;
-          font-size: 15px;
+          font-size: 14px;
           transition: border-color 0.2s;
         }
 
@@ -510,13 +537,13 @@ const Auth: React.FC = () => {
         }
 
         .auth-submit {
-          margin-top: 10px;
-          padding: 14px;
+          margin-top: 6px; /* Уменьшил отступы */
+          padding: 10px; /* Уменьшил отступы */
           background-color: #1a5f7a;
           color: white;
           border: none;
           border-radius: 6px;
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 500;
           cursor: pointer;
           transition: background-color 0.2s;
@@ -534,19 +561,19 @@ const Auth: React.FC = () => {
         /* Адаптивность */
         @media (max-width: 480px) {
           .auth-card {
-            padding: 20px 15px;
+            padding: 15px 12px;
           }
           
           .auth-header h1 {
-            font-size: 20px;
+            font-size: 18px;
           }
           
           .form-group input {
-            padding: 10px;
+            padding: 8px;
           }
           
           .auth-submit {
-            padding: 12px;
+            padding: 10px;
           }
         }
       `}} />

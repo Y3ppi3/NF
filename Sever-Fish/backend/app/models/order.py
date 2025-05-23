@@ -1,4 +1,3 @@
-# app/models/order.py
 from sqlalchemy import Column, ForeignKey, Integer, String, Float, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -14,6 +13,14 @@ class Order(Base):
     status = Column(String, default="pending")
     created_at = Column(DateTime, default=datetime.now)
     total_amount = Column(Float)
+    
+    # Добавляем новые поля
+    delivery_address = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    comment = Column(String, nullable=True)
+    payment_method = Column(String, default="cash")
 
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order")
