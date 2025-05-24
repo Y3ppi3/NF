@@ -31,4 +31,5 @@ class Category(CategoryBase):
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
-        from_attributes = True
+    # Удалите или закомментируйте следующую строку, она лишняя
+    # from_attributes = True

@@ -1,69 +1,104 @@
-from pydantic import Field, ConfigDict, BaseModel, Field, ConfigDict
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
-from app.schemas.order_item import OrderItemCreate, OrderItemResponse
-from app.schemas.user import UserResponse
+
+
+class OrderItemBase(BaseModel):
+    product_id: int
+    product_name: Optional[str] = None
+    quantity: int
+    price: float
+    subtotal: Optional[float] = None
+
 
 class OrderBase(BaseModel):
     user_id: Optional[int] = None
-    client_name: Optional[str] = None
-    total_price: float = Field(..., ge=0)
     status: str = "pending"
     delivery_address: Optional[str] = None
-    contact_phone: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    comment: Optional[str] = None
     payment_method: Optional[str] = None
 
 
 class OrderCreate(OrderBase):
-    items: List[OrderItemCreate]
+    total_amount: float
+    items: Optional[List[OrderItemBase]] = None
 
 
 class OrderUpdate(BaseModel):
     status: Optional[str] = None
+    name: Optional[str] = None
+    delivery_address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    comment: Optional[str] = None
+    payment_method: Optional[str] = None
     tracking_number: Optional[str] = None
     courier_name: Optional[str] = None
     delivery_notes: Optional[str] = None
-    estimated_delivery: Optional[date] = None
+    estimated_delivery: Optional[Union[date, datetime]] = None
+    actual_delivery: Optional[datetime] = None
+    payment_status: Optional[str] = None
+    transaction_id: Optional[str] = None
 
 
-class OrderInDB(OrderBase):
+class OrderInDB(BaseModel):
     id: int
+    user_id: Optional[int] = None
+    status: str = "pending"
     created_at: datetime
+    total_amount: float
+    delivery_address: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    comment: Optional[str] = None
+    payment_method: Optional[str] = None
     tracking_number: Optional[str] = None
     courier_name: Optional[str] = None
     delivery_notes: Optional[str] = None
-    estimated_delivery: Optional[date] = None
-    order_items: Optional[str] = None
-    model_config = ConfigDict(from_attributes=True, frozen=True)
+    estimated_delivery: Optional[Union[date, datetime]] = None
+    actual_delivery: Optional[datetime] = None
+    
+    class Config:
+        orm_mode = True
+
+
+class PaymentBase(BaseModel):
+    id: int
+    payment_status: str
+    payment_method: str
+    transaction_id: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        orm_mode = True
 
 
 class OrderResponse(OrderInDB):
-    items: Optional[List[OrderItemResponse]] = None
-    user: Optional[UserResponse] = None
-    order_items: Optional[List[Dict[str, Any]]] = None  # Обработанная версия JSON строки
+    pass
 
 
 class OrderWithPayment(BaseModel):
     id: int
     user_id: Optional[int] = None
-    client_name: Optional[str] = None
-    total_price: float
-    created_at: datetime
     status: str
+    created_at: datetime
+    total_amount: float
     delivery_address: Optional[str] = None
-    contact_phone: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    comment: Optional[str] = None
     payment_method: Optional[str] = None
-    # Поля доставки
     tracking_number: Optional[str] = None
     courier_name: Optional[str] = None
     delivery_notes: Optional[str] = None
-    estimated_delivery: Optional[date] = None
+    estimated_delivery: Optional[Union[date, datetime]] = None
+    actual_delivery: Optional[datetime] = None
+    order_items: Optional[List[Dict[str, Any]]] = None
+    payment: Optional[PaymentBase] = None
     payment_status: Optional[str] = None
     transaction_id: Optional[str] = None
-    payment_created_at: Optional[datetime] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    order_items: Optional[List[dict]] = None
-    items: Optional[List[Dict[str, Any]]] = None
-
-    model_config = ConfigDict(from_attributes=True)
