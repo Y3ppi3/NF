@@ -2,6 +2,7 @@ from pydantic import Field, ConfigDict, BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
+
 class AdministratorBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr

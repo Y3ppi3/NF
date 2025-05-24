@@ -1,6 +1,7 @@
-from pydantic import Field, ConfigDict, BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from app.schemas.product import ProductResponse
+
 
 class OrderItemBase(BaseModel):
     product_id: int

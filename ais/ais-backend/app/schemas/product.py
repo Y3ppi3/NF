@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 from app.schemas.category import CategoryResponse
 
+
 class ProductBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=200)
     category_id: int

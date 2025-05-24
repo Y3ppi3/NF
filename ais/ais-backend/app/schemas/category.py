@@ -1,4 +1,4 @@
-from pydantic import Field, ConfigDict, BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -31,4 +31,3 @@ class Category(CategoryBase):
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
-        from_attributes = True
