@@ -5,15 +5,18 @@ from typing import List, Dict, Any, Optional
 from app.database import get_db
 from app.services.logging_service import logger
 from app.services.orders_service import OrderService
-from app.schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderWithPayment
+from app.schemas.order import OrderCreate, OrderUpdate, OrderResponse, OrderWithPayment, OrderInDB
 from app.routers.auth import get_current_user, get_current_user_optional
 
 # Создаем роутер для заказов
+router = APIRouter(tags=["Orders"])
+
 router = APIRouter(
     prefix="/orders",
     tags=["Orders"],
     responses={404: {"description": "Заказ не найден"}},
 )
+
 
 # Получить все заказы
 @router.get("/", response_model=List[OrderWithPayment])
