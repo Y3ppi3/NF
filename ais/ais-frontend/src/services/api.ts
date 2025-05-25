@@ -103,27 +103,32 @@ export const trySeveralEndpoints = async <T>(
     data?: any,
     config: any = {}
 ): Promise<T> => {
+    // Получаем токен из хранилища - важно получать его здесь для каждого запроса,
+    // так как токен мог быть обновлён между запросами
     const token = getAuthToken();
+
+    // Правильно формируем заголовок авторизации
     const headers = {
         'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : undefined,
+        // Важно: Проверяем наличие токена и корректно формируем заголовок
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...config.headers
     };
 
-    let lastError;
+    // Удаляем жёстко закодированные endpoint'ы для продуктов
+    // const dockerEndpoints = [
+    //     `${API_GATEWAY_URL}/ais/api/products`,
+    //     `${API_GATEWAY_URL}/products`
+    // ];
 
-    // Добавляем предпочтительные endpoints с учетом Docker
-    const dockerEndpoints = [
-        `${API_GATEWAY_URL}/ais/api/products`,
-        `${API_GATEWAY_URL}/products`
-    ];
-
-    // Объединяем все endpoint-ы для проверки
-    const allEndpoints = [...dockerEndpoints, ...endpoints];
+    // Используем только переданные endpoints
+    const allEndpoints = endpoints;
 
     for (const endpoint of allEndpoints) {
         try {
             console.log(`Trying to ${method} from endpoint: ${endpoint}`);
+            console.log(`Authorization header: ${headers.Authorization ? 'Set' : 'Not set'}`);
+
             const response = await axios({
                 method,
                 url: endpoint,
@@ -136,11 +141,16 @@ export const trySeveralEndpoints = async <T>(
             return response.data;
         } catch (error) {
             console.log(`Failed to ${method} from ${endpoint}:`, error);
-            lastError = error;
+
+            // Если получили 401, возможно нам нужно обновить токен
+            if (error.response && error.response.status === 401) {
+                console.warn('Получен 401 Unauthorized, возможно требуется обновление токена');
+                // Здесь можно добавить логику обновления токена при необходимости
+            }
         }
     }
 
-    // В случае всех ошибок, возвращаем пустой массив вместо исключения
+    // В случае всех ошибок, возвращаем пустой массив
     console.warn('All API endpoints failed, returning empty array');
     return [] as unknown as T;
 };
@@ -252,13 +262,20 @@ export const deleteProduct = async (id: number) => {
 // API функции для категорий
 export const getCategories = async () => {
     console.log("Fetching categories...");
+
+    // Приоритет отдаем прямому URL к бэкенду с правильным окончанием "/"
     const endpoints = [
-        `${API_FULL_URL}/categories`,
-        `${API_BASE_URL}/categories`,
-        `/api/categories`,
-        `/categories`,
-        `http://localhost:8001/api/categories`
+        `http://localhost:8001/api/categories/`,
+        `${API_GATEWAY_URL}/ais/api/categories/`,
+        `${API_FULL_URL}/categories/`,
+        `${API_BASE_URL}/categories/`,
+        `/api/categories/`,
+        `/categories/`
     ];
+
+    // Добавляем явный вывод токена для отладки
+    const token = getAuthToken();
+    console.log("Using auth token for categories:", token ? "Token present" : "No token");
 
     return trySeveralEndpoints(endpoints);
 };
@@ -327,13 +344,21 @@ export const getStocks = async () => {
 };
 
 export const getWarehouses = async () => {
+    console.log("Fetching warehouses...");
+
+    // Приоритет отдаем прямому URL к бэкенду с правильным окончанием "/"
     const endpoints = [
-        `${API_FULL_URL}/warehouses`,
-        `${API_BASE_URL}/warehouses`,
-        `/api/warehouses`,
-        `/warehouses`,
-        `http://localhost:8001/api/warehouses`
+        `http://localhost:8001/api/warehouses/`,
+        `${API_GATEWAY_URL}/ais/api/warehouses/`,
+        `${API_FULL_URL}/warehouses/`,
+        `${API_BASE_URL}/warehouses/`,
+        `/api/warehouses/`,
+        `/warehouses/`
     ];
+
+    // Добавляем явный вывод токена для отладки
+    const token = getAuthToken();
+    console.log("Using auth token for warehouses:", token ? "Token present" : "No token");
 
     return trySeveralEndpoints(endpoints);
 };
