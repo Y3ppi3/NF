@@ -15,7 +15,7 @@ import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/ru';
 import locale from 'antd/lib/date-picker/locale/ru_RU';
 import '../styles/Orders.css';
-import { getAxiosAuthConfig } from '../services/api';
+import { apiClient } from '/src/services/api.ts';
 
 // Устанавливаем русскую локаль для dayjs и плагины
 dayjs.locale('ru');
@@ -121,13 +121,12 @@ const Orders: React.FC = () => {
   // Инициализация навигации
   const navigate = useNavigate();
 
-  // Настройка axios с токеном авторизации
-  const axiosInstance = useMemo(() => {
-    return axios.create({
-      baseURL: '',  // Используем относительные пути
-      ...getAxiosAuthConfig()
-    });
-  }, []);
+
+// В вашем компоненте:
+const axiosInstance = useMemo(() => {
+  // Используем уже настроенный apiClient вместо создания нового экземпляра axios
+  return apiClient;
+}, []);
 
   // Обновление статуса заказа
   const updateOrderStatus = async (id: number, status: string) => {
