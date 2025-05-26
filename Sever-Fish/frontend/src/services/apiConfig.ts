@@ -1,100 +1,30 @@
-/**
- * Основные настройки для API и запросов
- */
-
 // Базовый URL API
 export const API_BASE_URL = "http://127.0.0.1:8000";
 
-// Альтернативные URL для API (в порядке приоритета)
+// Эндпоинты API
 export const API_ENDPOINTS = {
-  // Эндпоинты для категорий 
-  categories: [
-    `${API_BASE_URL}/categories`, 
-    `${API_BASE_URL}/api/categories`,
-    `${API_BASE_URL}/products/categories`
-  ],
+  // Товары и категории
+  PRODUCTS: `${API_BASE_URL}/products`,
+  CATEGORIES: `${API_BASE_URL}/products/categories/`,
+  PRODUCT_BY_ID: (id: number) => `${API_BASE_URL}/products/${id}`,
+  PRODUCTS_BY_CATEGORY: (slug: string) => `${API_BASE_URL}/products/category/${slug}`,
   
-  // Эндпоинты для товаров
-  products: [
-    `${API_BASE_URL}/products`,
-    `${API_BASE_URL}/api/products`
-  ],
+  // Корзина - поддержка обоих возможных путей
+  CART: `${API_BASE_URL}/api/cart`,
+  CART_ITEM: (id: number) => `${API_BASE_URL}/api/cart/${id}`,
   
-  // Эндпоинты для корзины
-  cart: [
-    `${API_BASE_URL}/cart`,
-    `${API_BASE_URL}/api/cart`
-  ],
+  // Альтернативные пути для корзины
+  CART_ALT: `${API_BASE_URL}/cart/`,
+  CART_ITEM_ALT: (id: number) => `${API_BASE_URL}/cart/${id}`,
   
-  // Эндпоинты для авторизации
-  auth: [
-    `${API_BASE_URL}/auth/login`,
-    `${API_BASE_URL}/api/auth/login`
-  ],
+  // Пользователи и аутентификация
+  LOGIN: `${API_BASE_URL}/auth/login`,
+  REGISTER: `${API_BASE_URL}/auth/register`,
+  USER_PROFILE: `${API_BASE_URL}/auth/profile`,
   
-  // Эндпоинты для регистрации
-  register: [
-    `${API_BASE_URL}/auth/register`,
-    `${API_BASE_URL}/api/auth/register`
-  ],
-  
-  // Эндпоинты для заказов
-  orders: [
-    `${API_BASE_URL}/orders`,
-    `${API_BASE_URL}/api/orders`
-  ],
-  
-  // Эндпоинты для профиля пользователя
-  profile: [
-    `${API_BASE_URL}/users/me`,
-    `${API_BASE_URL}/api/users/me`
-  ],
-  
-  // Эндпоинты для проверки здоровья API
-  health: [
-    `${API_BASE_URL}/health`,
-    `${API_BASE_URL}/api/health`
-  ]
-};
-
-// Настройки запросов
-export const REQUEST_CONFIG = {
-  timeout: 10000,
-  headers: {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json'
-  }
-};
-
-// Функции для работы с локальным хранилищем
-export const Storage = {
-  // Токен авторизации
-  getToken: () => localStorage.getItem('token'),
-  setToken: (token: string) => localStorage.setItem('token', token),
-  removeToken: () => localStorage.removeItem('token'),
-  
-  // Тип токена
-  getTokenType: () => localStorage.getItem('tokenType') || 'Bearer',
-  setTokenType: (type: string) => localStorage.setItem('tokenType', type),
-  
-  // Данные пользователя
-  getUserId: () => localStorage.getItem('userId'),
-  setUserId: (id: string) => localStorage.setItem('userId', id),
-  getUsername: () => localStorage.getItem('username'),
-  setUsername: (name: string) => localStorage.setItem('username', name),
-  
-  // Очистка всех данных авторизации
-  clearAuthData: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('tokenType');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('isAdmin');
-  },
-  
-  // Сохранение URL для перенаправления после авторизации
-  setRedirectPath: (path: string) => localStorage.setItem('redirectAfterAuth', path),
-  getRedirectPath: () => localStorage.getItem('redirectAfterAuth'),
-  clearRedirectPath: () => localStorage.removeItem('redirectAfterAuth')
+  // Заказы - поддержка обоих возможных путей
+  ORDERS: `${API_BASE_URL}/api/orders`,
+  ORDERS_ALT: `${API_BASE_URL}/orders`,
+  ORDER_BY_ID: (id: number) => `${API_BASE_URL}/api/orders/${id}`,
+  ORDER_BY_ID_ALT: (id: number) => `${API_BASE_URL}/orders/${id}`,
 };

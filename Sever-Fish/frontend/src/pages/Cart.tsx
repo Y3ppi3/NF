@@ -1,94 +1,350 @@
-import React, { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../hooks/useCart';
-import { useAuth } from '../hooks/useAuth';
-import { CartItemComponent } from '../components/cart/CartItem';
-import { CartSummary } from '../components/cart/CartSummary';
-import { Button } from '../components/ui/Button';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import './Cart.css';
+import CheckoutForm from '../components/CheckoutForm';
+import { useCart } from '../contexts/CartContext';
+import { API_BASE_URL } from '../utils/apiConfig';
 
 // Компонент уведомления о необходимости авторизации
-const AuthNotification: React.FC = () => {
+const AuthNotification = () => {
   const navigate = useNavigate();
   
+  // Сохраняем текущий путь в localStorage для перенаправления после авторизации
+  useEffect(() => {
+    localStorage.setItem('redirectAfterAuth', '/cart');
+  }, []);
+
   return (
     <div className="cart-container">
-      <div className="auth-notification p-8 bg-white rounded-lg shadow-md text-center">
-        <h2 className="text-xl font-bold mb-4 text-blue-800">Для доступа к корзине необходимо войти в аккаунт</h2>
-        <p className="mb-6 text-gray-600">Чтобы добавлять товары в корзину и оформлять заказы, пожалуйста, авторизуйтесь</p>
-        <Button 
+      <div className="auth-notification">
+        <h2>Для доступа к корзине необходимо войти в аккаунт</h2>
+        <p>Чтобы добавлять товары в корзину и оформлять заказы, пожалуйста, авторизуйтесь</p>
+        <button 
           onClick={() => navigate('/auth')} 
-          size="lg"
-        >
+          className="login-button">
           Войти в аккаунт
-        </Button>
+        </button>
       </div>
-    </div>
-  );
-};
-
-// Компонент пустой корзины
-const EmptyCart: React.FC = () => {
-  return (
-    <div className="py-8 text-center">
-      <div className="mb-6">
-        <svg className="w-24 h-24 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      </div>
-      <h2 className="text-xl font-semibold mb-4 text-gray-700">Ваша корзина пуста</h2>
-      <p className="text-gray-500 mb-8">Добавьте товары в корзину, чтобы оформить заказ</p>
-      <Link to="/products">
-        <Button variant="primary">Перейти к каталогу</Button>
-      </Link>
     </div>
   );
 };
 
 // Основной компонент корзины
-const Cart: React.FC = () => {
-  const { items, totalItems, getCart, loading } = useCart();
-  const { isAuthenticated } = useAuth();
+const Cart = () => {
+  const { cartItems, removeFromCart, updateCartItemQuantity, clearCart, isLoading: cartLoading, refreshCart } = useCart();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showCheckoutForm, setShowCheckoutForm] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const navigate = useNavigate();
 
-  // Загружаем корзину при монтировании компонента
+  // Проверка авторизации
+  const isAuthenticated = Boolean(localStorage.getItem('token'));
+
+  // Эффект для обновления корзины при изменении состояния авторизации
   useEffect(() => {
-    if (isAuthenticated) {
-      getCart();
+    refreshCart();
+  }, [isAuthenticated, refreshCart]);
+
+  // Эффект для загрузки профиля пользователя, если он авторизован
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!isAuthenticated) return;
+      
+      try {
+        const token = localStorage.getItem('token');
+        const tokenType = localStorage.getItem('tokenType');
+        
+        if (!token || !tokenType) return;
+        
+        const response = await axios.get(`${API_BASE_URL}/auth/profile`, {
+          headers: {
+            'Authorization': `${tokenType} ${token}`
+          }
+        });
+        
+        setUserProfile(response.data);
+      } catch (error) {
+        console.error("Ошибка при загрузке профиля:", error);
+      }
+    };
+    
+    fetchUserProfile();
+  }, [isAuthenticated]);
+
+  // Обработчик нажатия кнопки удаления товара
+  const handleRemoveItem = useCallback(async (itemId) => {
+    await removeFromCart(itemId);
+  }, [removeFromCart]);
+
+  // Обработчик изменения количества товара
+  const handleQuantityChange = useCallback(async (itemId, newQuantity) => {
+    if (newQuantity < 1) return;
+    await updateCartItemQuantity(itemId, newQuantity);
+  }, [updateCartItemQuantity]);
+
+  // Обработчик нажатия кнопки очистки корзины
+  const handleClearCart = useCallback(async () => {
+    if (window.confirm("Вы уверены, что хотите очистить корзину?")) {
+      await clearCart();
     }
-  }, [isAuthenticated, getCart]);
+  }, [clearCart]);
+
+  // Обработчик нажатия кнопки оформления заказа
+  const handleCheckout = () => {
+    if (!isAuthenticated) {
+      setError("Для оформления заказа необходимо авторизоваться");
+      return;
+    }
+    
+    setShowCheckoutForm(true);
+  };
+
+  // Обработчик отмены оформления заказа
+  const handleCancelCheckout = () => {
+    setShowCheckoutForm(false);
+  };
+
+  // Обработчик отправки формы оформления заказа
+  const handleSubmitOrder = async (formData) => {
+    if (!isAuthenticated) {
+      setError("Для оформления заказа необходимо авторизоваться");
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      const tokenType = localStorage.getItem('tokenType');
+      
+      if (!token || !tokenType) {
+        throw new Error("Не удалось получить токен авторизации");
+      }
+      
+      // Подготавливаем данные для создания заказа
+      const orderData = {
+        delivery_address: formData.address,
+        contact_phone: formData.phone,
+        contact_email: formData.email,
+        contact_name: `${formData.firstName} ${formData.lastName}`,
+        delivery_date: formData.deliveryDate,
+        payment_method: formData.paymentMethod,
+        items: cartItems.map(item => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          price: item.product.price
+        }))
+      };
+      
+      // Пробуем разные URL для создания заказа
+      const orderApis = [
+        `${API_BASE_URL}/api/orders`,
+        `${API_BASE_URL}/orders`,
+        `${API_BASE_URL}/api/orders/`
+      ];
+      
+      let success = false;
+      
+      for (const api of orderApis) {
+        try {
+          console.log(`Попытка создания заказа по URL: ${api}`);
+          await axios.post(api, orderData, {
+            headers: {
+              'Authorization': `${tokenType} ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          success = true;
+          console.log(`Заказ успешно создан по ${api}`);
+          break;
+        } catch (err) {
+          console.error(`Ошибка при создании заказа по ${api}:`, err);
+          // Продолжаем пробовать следующий URL
+        }
+      }
+      
+      if (!success) {
+        throw new Error('Не удалось создать заказ ни по одному из адресов');
+      }
+      
+      // Обновляем корзину и счетчик
+      await refreshCart();
+      
+      setLoading(false);
+      setShowCheckoutForm(false);
+      navigate('/account');
+    } catch (error) {
+      console.error('Ошибка при оформлении заказа:', error);
+      setError('Не удалось оформить заказ. Пожалуйста, попробуйте позже.');
+      setLoading(false);
+    }
+  };
+
+  // Функция для форматирования цены
+  const formatPrice = (price) => {
+    // Если цена целое число, возвращаем без десятичной части
+    if (Number.isInteger(price)) {
+      return `${price} ₽`;
+    }
+    // Иначе округляем до 2 знаков после запятой
+    return `${price.toFixed(2)} ₽`;
+  };
+
+  // Вычисляем общую стоимость корзины
+  const totalPrice = cartItems.reduce((sum, item) => {
+    return sum + (item.product?.price || 0) * item.quantity;
+  }, 0);
+
+  if (loading && !cartItems.length) {
+    return <div className="cart-container">Загрузка...</div>;
+  }
+
+  // Показываем ошибку, но продолжаем отображать корзину, если есть товары
+  const showError = error && (
+    <div className="error-container">
+      <div className="error">{error}</div>
+    </div>
+  );
 
   // Если пользователь не авторизован, показываем уведомление
   if (!isAuthenticated) {
     return <AuthNotification />;
   }
 
+  // Если отображается форма оформления заказа
+  if (showCheckoutForm) {
+    // Предзаполняем форму данными пользователя, если они доступны
+    const prefillData = userProfile ? {
+      firstName: userProfile.full_name?.split(' ')[0] || '',
+      lastName: userProfile.full_name?.split(' ')[1] || '',
+      email: userProfile.email || '',
+      phone: userProfile.phone || ''
+    } : null;
+    
+    return (
+      <CheckoutForm 
+        onSubmit={handleSubmitOrder} 
+        onCancel={handleCancelCheckout}
+        totalPrice={totalPrice}
+        cartItems={cartItems}
+        prefillData={prefillData}
+      />
+    );
+  }
+
+  if (cartItems.length === 0) {
+    return (
+      <div className="cart-container">
+        {showError}
+        <div className="empty-cart">
+          <h2>Ваша корзина пока пуста</h2>
+          <p>Добавьте свежую рыбу и морепродукты, чтобы оформить заказ</p>
+          <button onClick={() => navigate('/products')} className="continue-shopping">
+            Перейти в каталог
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-8 text-center text-blue-800">Корзина</h1>
+    <div className="cart-container">
+      <h1>Ваша корзина</h1>
       
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-        </div>
-      ) : totalItems === 0 ? (
-        <EmptyCart />
-      ) : (
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="cart-items space-y-6">
-                {items.map((item) => (
-                  <CartItemComponent key={item.id} item={item} />
-                ))}
+      {showError}
+      
+      <div className="cart-items">
+        {cartItems.map((item) => (
+          <div key={item.id} className="cart-item">
+            {item.product?.image_url && (
+              <div className="item-image">
+                <img src={item.product.image_url} alt={item.product.name} />
               </div>
+            )}
+            
+            <div className="item-details">
+              <div className="item-name">{item.product?.name}</div>
+              <div className="item-price">
+                {formatPrice(item.product?.price || 0)} за шт.
+              </div>
+              {item.product?.weight && (
+                <div className="item-weight">
+                  {item.product.weight}
+                </div>
+              )}
             </div>
+            
+            <div className="item-quantity">
+              <button 
+                className="quantity-button"
+                onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                disabled={item.quantity <= 1}
+              >
+                -
+              </button>
+              <span className="quantity-value">{item.quantity}</span>
+              <button 
+                className="quantity-button"
+                onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                disabled={item.quantity >= 99}
+              >
+                +
+              </button>
+            </div>
+            
+            <div className="item-total">
+              {formatPrice((item.product?.price || 0) * item.quantity)}
+            </div>
+            
+            <button 
+              className="remove-button"
+              onClick={() => handleRemoveItem(item.id)}
+              aria-label="Удалить товар"
+            >
+              ✕
+            </button>
           </div>
-          
-          <div className="md:col-span-1">
-            <CartSummary />
-          </div>
+        ))}
+      </div>
+      
+      <div className="cart-controls">
+        <button 
+          className="clear-cart-button"
+          onClick={handleClearCart}
+          disabled={cartItems.length === 0}
+        >
+          Очистить корзину
+        </button>
+      </div>
+      
+      <div className="cart-summary">
+        <div className="total-items">
+          Товаров в корзине: <span>{cartItems.length}</span>
         </div>
-      )}
+        <div className="total-price">
+          Итого: <span>{formatPrice(totalPrice)}</span>
+        </div>
+      </div>
+      
+      <div className="cart-buttons">
+        <button 
+          className="checkout-button"
+          onClick={handleCheckout}
+          disabled={cartItems.length === 0 || loading}
+        >
+          {loading ? 'Обработка...' : 'Оформить заказ'}
+        </button>
+        
+        <button 
+          className="continue-shopping"
+          onClick={() => navigate('/products')}
+        >
+          Продолжить покупки
+        </button>
+      </div>
     </div>
   );
 };
