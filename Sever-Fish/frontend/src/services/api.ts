@@ -1,462 +1,378 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { API_BASE_URL, API_ENDPOINTS, REQUEST_CONFIG, Storage } from '../utils/apiConfig';
+import { FALLBACK_CATEGORIES, FALLBACK_PRODUCTS } from '../utils/fallbackData';
 
-// Устанавливаем базовый URL, соответствующий вашему бэкенду
-export const API_BASE_URL = 'http://127.0.0.1:8000';
-
-// Создаем экземпляр axios с общими настройками
-export const api = axios.create({
+// Создаем экземпляр axios с базовыми настройками
+const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  // Добавляем withCredentials для работы с CORS и cookies
-  withCredentials: true
+  timeout: REQUEST_CONFIG.timeout,
+  headers: REQUEST_CONFIG.headers
 });
 
-// Интерцептор для добавления токена авторизации ко всем запросам
+// Глобальное состояние автономного режима
+let offlineMode = false;
+
+// Перехватчик запросов для добавления токена аутентификации
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    const tokenType = localStorage.getItem('tokenType') || 'bearer';
+    const token = Storage.getToken();
+    const tokenType = Storage.getTokenType();
     
     if (token) {
       config.headers.Authorization = `${tokenType} ${token}`;
     }
+    
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Интерцептор для обработки ошибок ответа
+// Перехватчик ответов для обработки ошибок аутентификации
 api.interceptors.response.use(
-  response => response,
-  error => {
-    // Не логируем ошибки CORS и Network, чтобы не засорять консоль
-    if (error.message !== 'Network Error' && !error.message.includes('CORS')) {
-      console.error('API Error:', error.response?.data || error.message);
-    }
-    
-    // Если ошибка 401 (unauthorized), очищаем токен и перенаправляем на страницу входа
-    if (error.response && error.response.status === 401) {
-      console.log('Unauthorized error, redirecting to login');
-      // Не выполняем перенаправление здесь, оставляем это компонентам
+  (response) => response,
+  (error: AxiosError) => {
+    // Если получили 401 - Unauthorized, очищаем данные авторизации
+    if (error.response?.status === 401) {
+      Storage.clearAuthData();
+      console.warn('Ошибка авторизации, требуется повторный вход');
+      
+      // Сохраняем текущий путь для перенаправления после авторизации
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/auth') {
+        Storage.setRedirectPath(currentPath);
+        window.location.href = '/auth';
+      }
     }
     
     return Promise.reject(error);
   }
 );
 
-export const API_ENDPOINTS = {
-  auth: `${API_BASE_URL}/auth`,
-  api: `${API_BASE_URL}/api`,
-};
-
 /**
- * Получение заголовков авторизации
+ * Функция для попытки запроса по нескольким URL с автоматическим переходом в автономный режим при неудаче
+ * @param endpoints Массив URL для попыток запроса
+ * @param method HTTP метод запроса
+ * @param data Данные для отправки (для POST, PUT)
+ * @param fallbackData Данные для возврата в автономном режиме
  */
-export function getAuthHeaders() {
-  const token = localStorage.getItem('token');
-  const tokenType = localStorage.getItem('tokenType') || 'bearer';
-  
-  if (!token) {
-    return {};
+async function tryEndpoints<T>(
+  endpoints: string[],
+  method: 'get' | 'post' | 'put' | 'delete' = 'get',
+  data?: any,
+  fallbackData?: T
+): Promise<T> {
+  // Если уже в автономном режиме и есть данные для автономного режима, возвращаем их
+  if (offlineMode && fallbackData !== undefined) {
+    return fallbackData;
   }
   
-  return {
-    'Authorization': `${tokenType} ${token}`
-  };
-}
-
-/**
- * Логин пользователя. Возвращает JWT токен.
- */
-export async function login(email: string, password: string): Promise<any> {
-  try {
-    // Обратите внимание, что мы используем поле "email" вместо "username"
-    const response = await api.post('/auth/login', {
-      email,
-      password
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Login error:', error);
-    if (axios.isAxiosError(error) && error.response) {
-      throw new Error(`Ошибка авторизации: ${error.response.data.detail || 'Проверьте введенные данные'}`);
-    }
-    throw new Error('Ошибка авторизации: Проблема с подключением к серверу');
+  // Если в автономном режиме, но нет данных - выбрасываем ошибку
+  if (offlineMode && fallbackData === undefined) {
+    throw new Error('Операция недоступна в автономном режиме');
   }
-}
-
-/**
- * Регистрация нового пользователя
- */
-export async function registerUser(
-  userData: { 
-    name: string; // Имя пользователя 
-    email: string; 
-    password: string;
-    phone?: string;
-    full_name?: string;
-  }
-): Promise<any> {
-  try {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
-  } catch (error) {
-    console.error('Registration error:', error);
-    if (axios.isAxiosError(error) && error.response) {
-      throw new Error(`Ошибка регистрации: ${error.response.data.detail || 'Проверьте введенные данные'}`);
-    }
-    throw new Error('Ошибка регистрации: Проблема с подключением к серверу');
-  }
-}
-
-/**
- * Получение информации о текущем пользователе.
- */
-export async function getCurrentUser(): Promise<any> {
-  try {
-    // Даже не пытаемся получить данные через API, если есть проблемы с CORS
-    // Сразу используем данные из JWT токена и localStorage
-    
-    // Попытка декодировать JWT токен для получения данных пользователя
-    const token = localStorage.getItem('token');
-    
-    if (token) {
-      try {
-        // Декодируем JWT токен
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        
-        const payload = JSON.parse(jsonPayload);
-        
-        if (payload.user_id) {
-          const userId = payload.user_id;
-          
-          // Сохраняем ID пользователя в localStorage
-          localStorage.setItem('userId', userId.toString());
-          
-          // Если есть subject (обычно email), используем его
-          if (payload.sub) {
-            if (!localStorage.getItem('username')) {
-              localStorage.setItem('username', payload.sub);
-            }
-            if (!localStorage.getItem('userEmail')) {
-              localStorage.setItem('userEmail', payload.sub);
-            }
-          }
-          
-          // Используем данные из localStorage для создания профиля
-          return {
-            id: userId,
-            username: localStorage.getItem('username') || payload.sub || 'user',
-            email: localStorage.getItem('userEmail') || payload.sub || null,
-            phone: localStorage.getItem('userPhone') || null,
-            full_name: localStorage.getItem('userFullName') || null,
-            birthday: null
-          };
-        }
-      } catch (tokenError) {
-        console.error('Error decoding JWT token:', tokenError);
+  
+  // Опции запроса
+  const options: AxiosRequestConfig = {};
+  
+  // Перебираем все указанные эндпоинты
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`Попытка ${method.toUpperCase()} запроса к ${endpoint}`);
+      
+      let response: AxiosResponse;
+      
+      switch (method) {
+        case 'get':
+          response = await api.get(endpoint, options);
+          break;
+        case 'post':
+          response = await api.post(endpoint, data, options);
+          break;
+        case 'put':
+          response = await api.put(endpoint, data, options);
+          break;
+        case 'delete':
+          response = await api.delete(endpoint, options);
+          break;
       }
+      
+      console.log(`Успешный ответ от ${endpoint}:`, response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Ошибка при ${method.toUpperCase()} запросе к ${endpoint}:`, error);
+      
+      // Продолжаем пробовать следующий эндпоинт, если текущий не сработал
     }
-    
-    // Проверяем наличие основных данных в localStorage
-    const userId = localStorage.getItem('userId');
-    const username = localStorage.getItem('username');
-    
-    if (userId && username) {
-      return {
-        id: Number(userId),
-        username: username,
-        email: localStorage.getItem('userEmail') || null,
-        phone: localStorage.getItem('userPhone') || null,
-        full_name: localStorage.getItem('userFullName') || null,
-        birthday: null
-      };
-    }
-    
-    // Если нет данных даже в localStorage
-    throw new Error('Данные пользователя не найдены');
-  } catch (error) {
-    console.error('Error in getCurrentUser:', error);
-    if (error instanceof Error) {
-      throw new Error(error.message);
-    }
-    throw new Error('Ошибка получения информации о пользователе');
   }
+  
+  // Если все попытки не удались, но есть данные для автономного режима
+  if (fallbackData !== undefined) {
+    console.warn('Все попытки запроса не удались, переход в автономный режим');
+    setOfflineMode(true);
+    return fallbackData;
+  }
+  
+  // Если нет данных для автономного режима, выбрасываем ошибку
+  throw new Error(`Не удалось выполнить запрос, все эндпоинты недоступны`);
+}
+
+// Публичный API для управления автономным режимом
+export function isOfflineMode(): boolean {
+  return offlineMode;
+}
+
+export function setOfflineMode(enable: boolean): void {
+  offlineMode = enable;
+  console.log(`Автономный режим ${enable ? 'включен' : 'выключен'}`);
 }
 
 /**
- * Получение списка товаров (с возможностью фильтрации по категории).
+ * Проверка здоровья API
  */
-export async function getProducts(categoryId?: number): Promise<any> {
+export async function checkApiHealth() {
   try {
-    // Пробуем разные URL для товаров
-    const urls = [
-      categoryId ? `/api/products?category_id=${categoryId}` : '/api/products',
-      categoryId ? `/products?category_id=${categoryId}` : '/products'
-    ];
-    
-    let lastError;
-    for (const url of urls) {
-      try {
-        const response = await api.get(url);
-        return response.data;
-      } catch (error) {
-        lastError = error;
-        // Не логируем ошибки, чтобы не засорять консоль
-        // Продолжаем со следующим URL
-      }
-    }
-    
-    // Если мы здесь, значит все URL не сработали
-    // Возвращаем пустой массив вместо ошибки
-    console.warn('All product URLs failed, returning empty array');
-    return [];
-  } catch (error) {
-    console.error('Error in getProducts:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
-  }
-}
-
-/**
- * Получение информации о товаре по ID.
- */
-export async function getProductById(productId: number): Promise<any> {
-  try {
-    // Пробуем разные URL для получения товара
-    const urls = [
-      `/api/products/${productId}`,
-      `/products/${productId}`
-    ];
-    
-    let lastError;
-    for (const url of urls) {
-      try {
-        const response = await api.get(url);
-        return response.data;
-      } catch (error) {
-        lastError = error;
-        // Не логируем ошибки, чтобы не засорять консоль
-        // Продолжаем со следующим URL
-      }
-    }
-    
-    // Если мы здесь, значит все URL не сработали
-    // Возвращаем пустой объект вместо ошибки
-    console.warn('All product detail URLs failed, returning empty object');
-    return {
-      id: productId,
-      name: 'Товар не найден',
-      price: 0,
-      description: 'Информация о товаре недоступна'
-    };
-  } catch (error) {
-    console.error('Error in getProductById:', error);
-    // Возвращаем минимальный объект вместо ошибки
-    return {
-      id: productId,
-      name: 'Товар не найден',
-      price: 0,
-      description: 'Информация о товаре недоступна'
-    };
-  }
-}
-
-/**
- * Получение корзины пользователя.
- */
-export async function getCart(): Promise<any> {
-  try {
-    // Не делаем запрос к API, а возвращаем пустой массив
-    // Так как на бэкенде корзина пока не реализована
-    return [];
-  } catch (error) {
-    console.error('Error in getCart:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
-  }
-}
-
-/**
- * Добавление товара в корзину.
- * Поскольку бэкенд не поддерживает корзину, храним корзину в localStorage
- */
-export async function addToCart(productId: number, quantity: number = 1): Promise<any> {
-  try {
-    // Получаем текущую корзину из localStorage
-    let cart = [];
-    const cartData = localStorage.getItem('cart');
-    
-    if (cartData) {
-      try {
-        cart = JSON.parse(cartData);
-      } catch (parseError) {
-        console.error('Error parsing cart data:', parseError);
-        cart = [];
-      }
-    }
-    
-    // Проверяем, есть ли уже этот товар в корзине
-    const existingItemIndex = cart.findIndex((item: any) => 
-      item.product_id === productId || 
-      (item.product && item.product.id === productId)
+    const result = await tryEndpoints<{status: string, message?: string}>(
+      API_ENDPOINTS.health,
+      'get',
+      undefined,
+      { status: 'offline', message: 'Автономный режим активен' }
     );
     
-    if (existingItemIndex >= 0) {
-      // Если товар уже в корзине, обновляем количество
-      cart[existingItemIndex].quantity += quantity;
-    } else {
-      // Если товара нет в корзине, добавляем его
-      // Получаем информацию о товаре
-      const product = await getProductById(productId);
-      
-      cart.push({
-        id: Date.now(), // Используем timestamp как уникальный ID
-        product_id: productId,
-        quantity: quantity,
-        product: product
-      });
+    // Если получили ответ от API, выходим из автономного режима
+    if (result.status === 'ok') {
+      setOfflineMode(false);
     }
     
-    // Сохраняем корзину в localStorage
-    localStorage.setItem('cart', JSON.stringify(cart));
-    
-    return cart;
+    return result;
   } catch (error) {
-    console.error('Error in addToCart:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
+    console.error('Ошибка при проверке здоровья API:', error);
+    setOfflineMode(true);
+    return { status: 'error', message: 'Не удалось проверить состояние API' };
   }
 }
 
 /**
- * Обновление количества товара в корзине
+ * Функции для работы с категориями
  */
-export async function updateCartItemQuantity(itemId: number, quantity: number): Promise<any> {
+export async function getCategories() {
+  return tryEndpoints<any[]>(
+    API_ENDPOINTS.categories, 
+    'get', 
+    undefined, 
+    FALLBACK_CATEGORIES
+  );
+}
+
+/**
+ * Функции для работы с товарами
+ */
+export async function getProducts() {
+  return tryEndpoints<any[]>(
+    API_ENDPOINTS.products, 
+    'get', 
+    undefined, 
+    FALLBACK_PRODUCTS
+  );
+}
+
+export async function getProductsByCategory(categoryId: number | string) {
+  const endpoints = API_ENDPOINTS.products.map(endpoint => 
+    `${endpoint}/category/${categoryId}`
+  );
+  
+  // Для автономного режима фильтруем локальные данные
+  const offlineData = FALLBACK_PRODUCTS.filter(
+    p => p.category_id.toString() === categoryId.toString()
+  );
+  
+  return tryEndpoints<any[]>(endpoints, 'get', undefined, offlineData);
+}
+
+export async function getProductById(productId: number | string) {
+  const endpoints = API_ENDPOINTS.products.map(endpoint => 
+    `${endpoint}/${productId}`
+  );
+  
+  // Для автономного режима находим товар в локальных данных
+  const offlineProduct = FALLBACK_PRODUCTS.find(
+    p => p.id.toString() === productId.toString()
+  );
+  
+  return tryEndpoints<any>(endpoints, 'get', undefined, offlineProduct);
+}
+
+/**
+ * Функции для работы с корзиной
+ */
+export async function getCart() {
+  // Для автономного режима возвращаем пустую корзину
+  const emptyCart = { items: [], total_items: 0, total_amount: 0 };
+  
+  return tryEndpoints<any>(API_ENDPOINTS.cart, 'get', undefined, emptyCart);
+}
+
+export async function addToCart(data: { product_id: number, quantity: number }) {
+  return tryEndpoints<any>(
+    API_ENDPOINTS.cart, 
+    'post', 
+    data, 
+    { success: true, message: 'Товар добавлен в корзину (автономный режим)' }
+  );
+}
+
+export async function updateCartItem(itemId: number, data: { quantity: number }) {
+  const endpoints = API_ENDPOINTS.cart.map(endpoint => `${endpoint}/${itemId}`);
+  
+  return tryEndpoints<any>(
+    endpoints, 
+    'put', 
+    data, 
+    { success: true, message: 'Количество товара изменено (автономный режим)' }
+  );
+}
+
+export async function removeFromCart(itemId: number) {
+  const endpoints = API_ENDPOINTS.cart.map(endpoint => `${endpoint}/${itemId}`);
+  
+  return tryEndpoints<any>(
+    endpoints, 
+    'delete', 
+    undefined, 
+    { success: true, message: 'Товар удален из корзины (автономный режим)' }
+  );
+}
+
+/**
+ * Функции для авторизации
+ */
+export async function login(credentials: { username: string, password: string }) {
   try {
-    // Получаем текущую корзину из localStorage
-    let cart = [];
-    const cartData = localStorage.getItem('cart');
-    
-    if (cartData) {
-      try {
-        cart = JSON.parse(cartData);
-      } catch (parseError) {
-        console.error('Error parsing cart data:', parseError);
-        cart = [];
+    // В автономном режиме имитируем вход для демо пользователя
+    if (offlineMode) {
+      if (credentials.username === 'demo' && credentials.password === 'demo') {
+        const userData = {
+          id: 1,
+          username: 'demo',
+          email: 'demo@example.com',
+          is_active: true,
+          is_admin: false
+        };
+        
+        const token = `offline_token_${Date.now()}`;
+        
+        Storage.setToken(token);
+        Storage.setTokenType('Bearer');
+        Storage.setUserId(userData.id.toString());
+        Storage.setUsername(userData.username);
+        
+        return {
+          access_token: token,
+          token_type: 'Bearer',
+          user: userData
+        };
+      } else {
+        throw new Error('В автономном режиме используйте учетные данные: demo/demo');
       }
     }
     
-    // Ищем товар в корзине
-    const itemIndex = cart.findIndex((item: any) => item.id === itemId);
+    // Запрос к API для авторизации
+    const response = await tryEndpoints<any>(API_ENDPOINTS.auth, 'post', credentials);
     
-    if (itemIndex >= 0) {
-      // Обновляем количество
-      cart[itemIndex].quantity = quantity;
-      
-      // Сохраняем корзину в localStorage
-      localStorage.setItem('cart', JSON.stringify(cart));
-    }
+    // Сохраняем данные авторизации
+    Storage.setToken(response.access_token);
+    Storage.setTokenType(response.token_type);
+    Storage.setUserId(response.user.id.toString());
+    Storage.setUsername(response.user.username);
     
-    return cart;
+    return response;
   } catch (error) {
-    console.error('Error in updateCartItemQuantity:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
+    console.error('Ошибка при авторизации:', error);
+    throw error;
   }
 }
 
-/**
- * Удаление товара из корзины
- */
-export async function removeFromCart(itemId: number): Promise<any> {
+export async function register(userData: { 
+  username: string, 
+  email: string, 
+  password: string,
+  full_name?: string
+}) {
+  if (offlineMode) {
+    throw new Error('Регистрация недоступна в автономном режиме');
+  }
+  
   try {
-    // Получаем текущую корзину из localStorage
-    let cart = [];
-    const cartData = localStorage.getItem('cart');
+    const response = await tryEndpoints<any>(API_ENDPOINTS.register, 'post', userData);
     
-    if (cartData) {
-      try {
-        cart = JSON.parse(cartData);
-      } catch (parseError) {
-        console.error('Error parsing cart data:', parseError);
-        cart = [];
-      }
-    }
+    // Сохраняем данные авторизации
+    Storage.setToken(response.access_token);
+    Storage.setTokenType(response.token_type);
+    Storage.setUserId(response.user.id.toString());
+    Storage.setUsername(response.user.username);
     
-    // Удаляем товар из корзины
-    const newCart = cart.filter((item: any) => item.id !== itemId);
-    
-    // Сохраняем корзину в localStorage
-    localStorage.setItem('cart', JSON.stringify(newCart));
-    
-    return newCart;
+    return response;
   } catch (error) {
-    console.error('Error in removeFromCart:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
+    console.error('Ошибка при регистрации:', error);
+    throw error;
   }
 }
 
-/**
- * Очистка корзины
- */
-export async function clearCart(): Promise<any> {
-  try {
-    // Очищаем корзину в localStorage
-    localStorage.setItem('cart', JSON.stringify([]));
-    
-    return [];
-  } catch (error) {
-    console.error('Error in clearCart:', error);
-    // Возвращаем пустой массив вместо ошибки
-    return [];
-  }
+export function logout() {
+  Storage.clearAuthData();
+  window.location.href = '/';
 }
 
 /**
- * Обновление профиля пользователя.
+ * Функции для работы с заказами
  */
-export async function updateUserProfile(profileData: any): Promise<any> {
-  try {
-    // Обновляем данные в localStorage
-    if (profileData.full_name) localStorage.setItem('userFullName', profileData.full_name);
-    if (profileData.email) localStorage.setItem('userEmail', profileData.email);
-    if (profileData.phone) localStorage.setItem('userPhone', profileData.phone);
-    
-    // Возвращаем данные как будто обновление успешно
-    return {
-      success: true,
-      message: 'Профиль обновлен',
-      ...profileData
-    };
-  } catch (error) {
-    console.error('Error in updateUserProfile:', error);
-    throw new Error('Ошибка обновления профиля');
-  }
+export async function createOrder(orderData: {
+  delivery_address: string;
+  phone: string;
+  delivery_date?: string;
+  notes?: string;
+}) {
+  // В автономном режиме имитируем создание заказа
+  const offlineOrder = {
+    id: Date.now(),
+    status: 'pending',
+    total_amount: 0,
+    user_id: Storage.getUserId() ? parseInt(Storage.getUserId() as string) : 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    items: [],
+    ...orderData
+  };
+  
+  return tryEndpoints<any>(API_ENDPOINTS.orders, 'post', orderData, offlineOrder);
 }
 
-/**
- * Изменение пароля пользователя.
- */
-export async function changePassword(passwordData: { current_password: string, new_password: string }): Promise<any> {
-  try {
-    // Имитируем успешное обновление пароля
-    return {
-      success: true,
-      message: 'Пароль успешно изменен'
-    };
-  } catch (error) {
-    console.error('Error in changePassword:', error);
-    throw new Error('Ошибка изменения пароля');
-  }
+export async function getOrders() {
+  // В автономном режиме возвращаем пустой список заказов
+  return tryEndpoints<any[]>(API_ENDPOINTS.orders, 'get', undefined, []);
 }
+
+export async function getOrderById(orderId: number) {
+  const endpoints = API_ENDPOINTS.orders.map(endpoint => `${endpoint}/${orderId}`);
+  
+  // В автономном режиме возвращаем заглушку заказа
+  const offlineOrder = {
+    id: orderId,
+    status: 'pending',
+    total_amount: 0,
+    user_id: Storage.getUserId() ? parseInt(Storage.getUserId() as string) : 1,
+    delivery_address: 'Адрес недоступен в автономном режиме',
+    phone: 'Телефон недоступен в автономном режиме',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    items: []
+  };
+  
+  return tryEndpoints<any>(endpoints, 'get', undefined, offlineOrder);
+}
+
+// Дополнительные вспомогательные функции
+export function isAuthenticated(): boolean {
+  return !!Storage.getToken();
+}
+
+export default api;

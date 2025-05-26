@@ -1,80 +1,100 @@
+/**
+ * Основные настройки для API и запросов
+ */
+
 // Базовый URL API
 export const API_BASE_URL = "http://127.0.0.1:8000";
 
-// Эндпоинты API
+// Альтернативные URL для API (в порядке приоритета)
 export const API_ENDPOINTS = {
-  // Товары и категории
-  PRODUCTS: `${API_BASE_URL}/products`,
-  CATEGORIES: `${API_BASE_URL}/products/categories/`,
-  PRODUCT_BY_ID: (id: number) => `${API_BASE_URL}/products/${id}`,
-  PRODUCTS_BY_CATEGORY: (slug: string) => `${API_BASE_URL}/products/category/${slug}`,
+  // Эндпоинты для категорий 
+  categories: [
+    `${API_BASE_URL}/categories`, 
+    `${API_BASE_URL}/api/categories`,
+    `${API_BASE_URL}/products/categories`
+  ],
   
-  // Корзина - поддержка обоих возможных путей
-  CART: `${API_BASE_URL}/api/cart`,
-  CART_ITEM: (id: number) => `${API_BASE_URL}/api/cart/${id}`,
+  // Эндпоинты для товаров
+  products: [
+    `${API_BASE_URL}/products`,
+    `${API_BASE_URL}/api/products`
+  ],
   
-  // Альтернативные пути для корзины
-  CART_ALT: `${API_BASE_URL}/cart/`,
-  CART_ITEM_ALT: (id: number) => `${API_BASE_URL}/cart/${id}`,
+  // Эндпоинты для корзины
+  cart: [
+    `${API_BASE_URL}/cart`,
+    `${API_BASE_URL}/api/cart`
+  ],
   
-  // Пользователи и аутентификация
-  LOGIN: `${API_BASE_URL}/auth/login`,
-  REGISTER: `${API_BASE_URL}/auth/register`,
-  USER_PROFILE: `${API_BASE_URL}/auth/profile`,
+  // Эндпоинты для авторизации
+  auth: [
+    `${API_BASE_URL}/auth/login`,
+    `${API_BASE_URL}/api/auth/login`
+  ],
   
-  // Заказы - поддержка обоих возможных путей
-  ORDERS: `${API_BASE_URL}/api/orders`,
-  ORDERS_ALT: `${API_BASE_URL}/orders`,
-  ORDER_BY_ID: (id: number) => `${API_BASE_URL}/api/orders/${id}`,
-  ORDER_BY_ID_ALT: (id: number) => `${API_BASE_URL}/orders/${id}`,
+  // Эндпоинты для регистрации
+  register: [
+    `${API_BASE_URL}/auth/register`,
+    `${API_BASE_URL}/api/auth/register`
+  ],
+  
+  // Эндпоинты для заказов
+  orders: [
+    `${API_BASE_URL}/orders`,
+    `${API_BASE_URL}/api/orders`
+  ],
+  
+  // Эндпоинты для профиля пользователя
+  profile: [
+    `${API_BASE_URL}/users/me`,
+    `${API_BASE_URL}/api/users/me`
+  ],
+  
+  // Эндпоинты для проверки здоровья API
+  health: [
+    `${API_BASE_URL}/health`,
+    `${API_BASE_URL}/api/health`
+  ]
 };
 
-// Получение заголовков с авторизацией
-export const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  const tokenType = localStorage.getItem('tokenType') || 'Bearer';
-  
-  if (!token) {
-    return {};
+// Настройки запросов
+export const REQUEST_CONFIG = {
+  timeout: 10000,
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
   }
-  
-  return {
-    'Authorization': `${tokenType} ${token}`,
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  };
 };
 
-// Функция для форматирования даты
-export const formatDate = (dateString: string) => {
-  if (!dateString) return '';
+// Функции для работы с локальным хранилищем
+export const Storage = {
+  // Токен авторизации
+  getToken: () => localStorage.getItem('token'),
+  setToken: (token: string) => localStorage.setItem('token', token),
+  removeToken: () => localStorage.removeItem('token'),
   
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric', 
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (e) {
-    return dateString;
-  }
-};
-
-// Функция для форматирования цены
-export const formatPrice = (price: number) => {
-  if (!price && price !== 0) return '';
+  // Тип токена
+  getTokenType: () => localStorage.getItem('tokenType') || 'Bearer',
+  setTokenType: (type: string) => localStorage.setItem('tokenType', type),
   
-  return price.toLocaleString('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  });
+  // Данные пользователя
+  getUserId: () => localStorage.getItem('userId'),
+  setUserId: (id: string) => localStorage.setItem('userId', id),
+  getUsername: () => localStorage.getItem('username'),
+  setUsername: (name: string) => localStorage.setItem('username', name),
+  
+  // Очистка всех данных авторизации
+  clearAuthData: () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('tokenType');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('isAdmin');
+  },
+  
+  // Сохранение URL для перенаправления после авторизации
+  setRedirectPath: (path: string) => localStorage.setItem('redirectAfterAuth', path),
+  getRedirectPath: () => localStorage.getItem('redirectAfterAuth'),
+  clearRedirectPath: () => localStorage.removeItem('redirectAfterAuth')
 };
-
-// Текущая дата и пользователь (для дебага)
-export const CURRENT_DATE = "2025-05-23 11:54:14";
-export const CURRENT_USER = "katarymba";

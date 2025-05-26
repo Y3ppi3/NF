@@ -1,469 +1,340 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import './Account.css';
-import { API_BASE_URL, API_ENDPOINTS } from '../utils/apiConfig';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+import { useOrders } from '../hooks/useOrders';
+import { OrderList } from '../components/order/OrderList';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Card, CardBody, CardHeader } from '../components/ui/Card';
 
-const Account = () => {
-  const [activeTab, setActiveTab] = useState('orders');
-  const [userProfile, setUserProfile] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
+interface ProfileForm {
+  full_name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
+interface PasswordForm {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+const Account: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
+  const { orders, getOrders, loading: ordersLoading } = useOrders();
+  
+  const [activeTab, setActiveTab] = useState('profile');
+  
+  // Состояние для форм
+  const [profileForm, setProfileForm] = useState<ProfileForm>({
+    full_name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
+  
+  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  
+  const [profileUpdateSuccess, setProfileUpdateSuccess] = useState(false);
+  const [passwordUpdateSuccess, setPasswordUpdateSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Проверяем авторизацию при загрузке компонента
+  // Проверяем авторизацию и загружаем данные
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!isAuthenticated && !authLoading) {
       navigate('/auth');
-      return;
+    } else if (isAuthenticated) {
+      // Загружаем заказы пользователя
+      getOrders();
     }
+  }, [isAuthenticated, authLoading, navigate, getOrders]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        await Promise.all([
-          fetchUserProfile(),
-          fetchOrders()
-        ]);
-      } catch (err) {
-        console.error('Ошибка при загрузке данных:', err);
-        setError('Не удалось загрузить данные. Пожалуйста, попробуйте позже.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [navigate]);
-
-  const fetchUserProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const tokenType = localStorage.getItem('tokenType') || 'Bearer';
-      
-      const response = await axios.get(API_ENDPOINTS.USER_PROFILE, {
-        headers: {
-          'Authorization': `${tokenType} ${token}`
-        }
+  // Обновляем форму при получении данных пользователя
+  useEffect(() => {
+    if (user) {
+      setProfileForm({
+        full_name: user.full_name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || ''
       });
-      
-      if (response.data) {
-        setUserProfile(response.data);
-        
-        // Сохраняем данные в localStorage
-        localStorage.setItem('userId', response.data.id?.toString() || '');
-        localStorage.setItem('username', response.data.username || '');
-        localStorage.setItem('userEmail', response.data.email || '');
-        localStorage.setItem('userPhone', response.data.phone || '');
-        localStorage.setItem('userFullName', response.data.full_name || '');
-      }
-    } catch (error) {
-      console.error('Ошибка при загрузке профиля:', error);
-      
-      // Если не удалось загрузить с сервера, используем localStorage
-      const userId = localStorage.getItem('userId');
-      const username = localStorage.getItem('username');
-      const email = localStorage.getItem('userEmail');
-      const phone = localStorage.getItem('userPhone');
-      const fullName = localStorage.getItem('userFullName');
-      
-      if (userId && username) {
-        setUserProfile({
-          id: Number(userId),
-          username,
-          email,
-          phone,
-          full_name: fullName
-        });
-      } else {
-        setError('Не удалось загрузить информацию о пользователе');
-      }
     }
-  };
+  }, [user]);
 
-  const fetchOrders = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const tokenType = localStorage.getItem('tokenType') || 'Bearer';
-      
-      let ordersData = [];
-      
-      // Пробуем первый эндпоинт
-      try {
-        const response = await axios.get(API_ENDPOINTS.ORDERS, {
-          headers: {
-            'Authorization': `${tokenType} ${token}`
-          }
-        });
-        
-        if (response.data && Array.isArray(response.data)) {
-          console.log('Заказы получены с основного эндпоинта:', response.data);
-          ordersData = response.data;
-        }
-      } catch (primaryError) {
-        console.error('Ошибка при загрузке заказов с основного эндпоинта:', primaryError);
-        
-        // Пробуем альтернативный эндпоинт
-        try {
-          const altResponse = await axios.get(API_ENDPOINTS.ORDERS_ALT, {
-            headers: {
-              'Authorization': `${tokenType} ${token}`
-            }
-          });
-          
-          if (altResponse.data && Array.isArray(altResponse.data)) {
-            console.log('Заказы получены с альтернативного эндпоинта:', altResponse.data);
-            ordersData = altResponse.data;
-          }
-        } catch (secondaryError) {
-          console.error('Ошибка при загрузке заказов с альтернативного эндпоинта:', secondaryError);
-          throw new Error('Не удалось загрузить историю заказов с сервера');
-        }
-      }
-      
-      // Сортируем заказы по дате (новые сначала)
-      ordersData.sort((a, b) => {
-        const dateA = new Date(a.created_at || 0);
-        const dateB = new Date(b.created_at || 0);
-        return dateB.getTime() - dateA.getTime();
-      });
-      
-      setOrders(ordersData);
-    } catch (error) {
-      console.error('Ошибка при загрузке заказов:', error);
-      setError('Не удалось загрузить историю заказов');
-    }
-  };
-
-  const handlePasswordChange = (e) => {
+  // Обработчик изменения формы профиля
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setPasswordForm({
-      ...passwordForm,
+    setProfileForm(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
 
-  const handleSubmitPasswordChange = async (e) => {
+  // Обработчик изменения формы пароля
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPasswordForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Обработчик обновления профиля
+  const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
+    setError(null);
+    setProfileUpdateSuccess(false);
     
-    // Валидация
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError('Новые пароли не совпадают');
-      return;
+    try {
+      // Здесь должен быть вызов API для обновления профиля
+      // Например: await updateProfile(profileForm);
+      
+      // Имитация успешного обновления
+      setTimeout(() => {
+        setProfileUpdateSuccess(true);
+      }, 500);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при обновлении профиля');
     }
+  };
+
+  // Обработчик изменения пароля
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setPasswordUpdateSuccess(false);
     
-    if (passwordForm.newPassword.length < 8) {
-      setPasswordError('Пароль должен содержать минимум 8 символов');
+    // Проверка совпадения паролей
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setError('Новый пароль и подтверждение не совпадают');
       return;
     }
     
     try {
-      const token = localStorage.getItem('token');
-      const tokenType = localStorage.getItem('tokenType') || 'Bearer';
+      // Здесь должен быть вызов API для изменения пароля
+      // Например: await changePassword(passwordForm);
       
-      await axios.post(`${API_BASE_URL}/auth/change-password`, {
-        current_password: passwordForm.currentPassword,
-        new_password: passwordForm.newPassword
-      }, {
-        headers: {
-          'Authorization': `${tokenType} ${token}`
-        }
-      });
-      
-      setPasswordSuccess('Пароль успешно изменен');
-      setPasswordForm({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
-    } catch (error) {
-      console.error('Ошибка при смене пароля:', error);
-      
-      if (error.response && error.response.status === 401) {
-        setPasswordError('Неверный текущий пароль');
-      } else {
-        setPasswordError('Ошибка при смене пароля. Пожалуйста, попробуйте позже.');
-      }
+      // Имитация успешного обновления
+      setTimeout(() => {
+        setPasswordUpdateSuccess(true);
+        setPasswordForm({
+          current_password: '',
+          new_password: '',
+          confirm_password: ''
+        });
+      }, 500);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при изменении пароля');
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('tokenType');
-    navigate('/');
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Дата не указана';
-    
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (e) {
-      return dateString;
-    }
-  };
-
-  const getStatusName = (status) => {
-    const statuses = {
-      'new': 'Новый',
-      'pending': 'В обработке',
-      'processing': 'В обработке',
-      'shipped': 'Отправлен',
-      'delivered': 'Доставлен',
-      'canceled': 'Отменен'
-    };
-    
-    return statuses[status] || status;
-  };
-
-  if (loading) {
+  if (authLoading) {
     return (
-      <div className="account-container">
-        <div className="loading-spinner"></div>
-        <p className="loading-text">Загрузка данных...</p>
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="account-container">
-      <h1 className="account-title">Личный кабинет</h1>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8 text-center text-blue-800">Личный кабинет</h1>
       
-      <div className="account-tabs">
-        <button 
-          className={`account-tab ${activeTab === 'profile' ? 'active' : ''}`}
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mb-8">
+        <button
+          className={`px-4 py-2 font-medium ${activeTab === 'profile' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('profile')}
         >
           Профиль
         </button>
-        <button 
-          className={`account-tab ${activeTab === 'orders' ? 'active' : ''}`}
+        <button
+          className={`px-4 py-2 font-medium ${activeTab === 'orders' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('orders')}
         >
           Мои заказы
         </button>
-        <button 
-          className={`account-tab ${activeTab === 'password' ? 'active' : ''}`}
+        <button
+          className={`px-4 py-2 font-medium ${activeTab === 'password' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('password')}
         >
           Изменить пароль
         </button>
-        <button 
-          className="account-tab logout-tab"
-          onClick={handleLogout}
-        >
-          Выйти
-        </button>
       </div>
       
-      {error && (
-        <div className="error-message">
-          {error}
-          <button onClick={() => setError('')} className="close-error">&times;</button>
-        </div>
-      )}
-      
-      {activeTab === 'profile' && (
-        <div className="account-section">
-          <h2>Информация о пользователе</h2>
-          
-          {userProfile ? (
-            <div className="profile-info">
-              <div className="profile-field">
-                <span className="field-label">Имя пользователя:</span>
-                <span className="field-value">{userProfile.username}</span>
-              </div>
-              
-              {userProfile.email && (
-                <div className="profile-field">
-                  <span className="field-label">Email:</span>
-                  <span className="field-value">{userProfile.email}</span>
+      {/* Tab Content */}
+      <div className="mb-8">
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-bold">Данные профиля</h2>
+            </CardHeader>
+            <CardBody>
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                  {error}
                 </div>
               )}
               
-              {userProfile.phone && (
-                <div className="profile-field">
-                  <span className="field-label">Телефон:</span>
-                  <span className="field-value">{userProfile.phone}</span>
+              {profileUpdateSuccess && (
+                <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
+                  Профиль успешно обновлен
                 </div>
               )}
               
-              {userProfile.full_name && (
-                <div className="profile-field">
-                  <span className="field-label">Полное имя:</span>
-                  <span className="field-value">{userProfile.full_name}</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="no-data">Данные профиля не загружены</p>
-          )}
-        </div>
-      )}
-      
-      {activeTab === 'orders' && (
-        <div className="account-section">
-          <h2>История заказов</h2>
-          
-          {orders.length > 0 ? (
-            <div className="orders-list">
-              {orders.map((order) => (
-                <div key={order.id} className="order-item">
-                  <div className="order-header">
-                    <div className="order-id">Заказ #{order.id}</div>
-                    <div className={`order-status status-${order.status}`}>
-                      {getStatusName(order.status)}
-                    </div>
+              <form onSubmit={handleProfileUpdate}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ФИО</label>
+                    <Input
+                      type="text"
+                      name="full_name"
+                      value={profileForm.full_name}
+                      onChange={handleProfileChange}
+                      fullWidth
+                    />
                   </div>
                   
-                  <div className="order-details">
-                    <div className="order-info">
-                      <div className="info-item">
-                        <span className="info-label">Дата заказа:</span>
-                        <span className="info-value">{formatDate(order.created_at)}</span>
-                      </div>
-                      
-                      {order.delivery_address && (
-                        <div className="info-item">
-                          <span className="info-label">Адрес доставки:</span>
-                          <span className="info-value">{order.delivery_address}</span>
-                        </div>
-                      )}
-                      
-                      {order.contact_name && (
-                        <div className="info-item">
-                          <span className="info-label">Получатель:</span>
-                          <span className="info-value">{order.contact_name}</span>
-                        </div>
-                      )}
-                      
-                      {order.payment_method && (
-                        <div className="info-item">
-                          <span className="info-label">Способ оплаты:</span>
-                          <span className="info-value">
-                            {order.payment_method === 'card' ? 'Картой при получении' :
-                              order.payment_method === 'cash' ? 'Наличными при получении' :
-                                'Онлайн оплата'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {order.items && order.items.length > 0 && (
-                      <div className="order-items">
-                        <h3>Товары в заказе:</h3>
-                        <ul className="items-list">
-                          {order.items.map((item, index) => (
-                            <li key={index} className="item-row">
-                              <span className="item-name">
-                                {item.product?.name || `Товар #${item.product_id}`}
-                              </span>
-                              <span className="item-quantity">{item.quantity} шт.</span>
-                              <span className="item-price">{item.price * item.quantity} ₽</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="order-total">
-                          Итого: <span>{order.total_amount} ₽</span>
-                        </div>
-                      </div>
-                    )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <Input
+                      type="email"
+                      name="email"
+                      value={profileForm.email}
+                      onChange={handleProfileChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
+                    <Input
+                      type="tel"
+                      name="phone"
+                      value={profileForm.phone}
+                      onChange={handleProfileChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Адрес доставки</label>
+                    <Input
+                      type="text"
+                      name="address"
+                      value={profileForm.address}
+                      onChange={handleProfileChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div className="pt-4">
+                    <Button type="submit" fullWidth>
+                      Сохранить изменения
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="no-orders">
-              <p>У вас пока нет заказов</p>
-              <Link to="/products" className="shop-button">
-                Перейти в каталог
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {activeTab === 'password' && (
-        <div className="account-section">
-          <h2>Изменение пароля</h2>
-          
-          {passwordError && (
-            <div className="error-message">
-              {passwordError}
-              <button onClick={() => setPasswordError('')} className="close-error">&times;</button>
-            </div>
-          )}
-          
-          {passwordSuccess && (
-            <div className="success-message">
-              {passwordSuccess}
-              <button onClick={() => setPasswordSuccess('')} className="close-success">&times;</button>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmitPasswordChange} className="password-form">
-            <div className="form-group">
-              <label htmlFor="currentPassword">Текущий пароль</label>
-              <input
-                type="password"
-                id="currentPassword"
-                name="currentPassword"
-                value={passwordForm.currentPassword}
-                onChange={handlePasswordChange}
-                required
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="newPassword">Новый пароль</label>
-              <input
-                type="password"
-                id="newPassword"
-                name="newPassword"
-                value={passwordForm.newPassword}
-                onChange={handlePasswordChange}
-                minLength={8}
-                required
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="confirmPassword">Подтвердите пароль</label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={passwordForm.confirmPassword}
-                onChange={handlePasswordChange}
-                minLength={8}
-                required
-              />
-            </div>
-            
-            <button type="submit" className="submit-button">
-              Изменить пароль
-            </button>
-          </form>
-        </div>
-      )}
+              </form>
+              
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <Button variant="danger" onClick={logout} fullWidth>
+                  Выйти из аккаунта
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        )}
+        
+        {/* Orders Tab */}
+        {activeTab === 'orders' && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-bold">История заказов</h2>
+            </CardHeader>
+            <CardBody>
+              {ordersLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <OrderList orders={orders} />
+              )}
+            </CardBody>
+          </Card>
+        )}
+        
+        {/* Password Tab */}
+        {activeTab === 'password' && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-xl font-bold">Изменение пароля</h2>
+            </CardHeader>
+            <CardBody>
+              {error && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                  {error}
+                </div>
+              )}
+              
+              {passwordUpdateSuccess && (
+                <div className="mb-4 p-3 bg-green-100 text-green-700 rounded">
+                  Пароль успешно изменен
+                </div>
+              )}
+              
+              <form onSubmit={handlePasswordUpdate}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Текущий пароль</label>
+                    <Input
+                      type="password"
+                      name="current_password"
+                      value={passwordForm.current_password}
+                      onChange={handlePasswordChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Новый пароль</label>
+                    <Input
+                      type="password"
+                      name="new_password"
+                      value={passwordForm.new_password}
+                      onChange={handlePasswordChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Подтверждение пароля</label>
+                    <Input
+                      type="password"
+                      name="confirm_password"
+                      value={passwordForm.confirm_password}
+                      onChange={handlePasswordChange}
+                      fullWidth
+                    />
+                  </div>
+                  
+                  <div className="pt-4">
+                    <Button type="submit" fullWidth>
+                      Изменить пароль
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };

@@ -6,10 +6,9 @@ interface HeaderProps {
     onMenuToggle: () => void;
     cartCount: number;
     updateCartCount: () => void;
-    isAuthenticated?: boolean; // Добавлен опциональный параметр
 }
 
-const Header = ({ onMenuToggle, cartCount, updateCartCount, isAuthenticated = false }: HeaderProps) => {
+const Header = ({ onMenuToggle, cartCount, updateCartCount }: HeaderProps) => {
     // Используем useCallback для предотвращения пересоздания функции при каждом рендере
     const safeUpdateCartCount = useCallback(() => {
         try {
@@ -28,10 +27,6 @@ const Header = ({ onMenuToggle, cartCount, updateCartCount, isAuthenticated = fa
 
         return () => clearInterval(interval);
     }, [safeUpdateCartCount]);
-
-    // Получаем имя пользователя для отображения
-    const username = localStorage.getItem('username') || '';
-    const userInitial = username ? username.charAt(0).toUpperCase() : '';
 
     return (
         <header className="bg-white shadow-md sticky top-0 z-30">
@@ -66,27 +61,11 @@ const Header = ({ onMenuToggle, cartCount, updateCartCount, isAuthenticated = fa
                         )}
                     </Link>
 
-                    {isAuthenticated ? (
-                        // Если пользователь авторизован, показываем ссылку на личный кабинет
-                        <Link to="/account" className="flex items-center p-2 hover:bg-gray-100 rounded-full transition-colors">
-                            {userInitial ? (
-                                <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                                    {userInitial}
-                                </div>
-                            ) : (
-                                <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                            )}
-                        </Link>
-                    ) : (
-                        // Если пользователь не авторизован, показываем ссылку на страницу входа
-                        <Link to="/auth" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                        </Link>
-                    )}
+                    <Link to="/auth" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </Link>
                 </div>
             </div>
         </header>

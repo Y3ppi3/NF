@@ -1,7 +1,17 @@
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useProducts } from '../hooks/useProducts';
 import SimpleWaveAnimation from '../components/SimpleWaveAnimation';
 
-const Home = () => {
+const Home: React.FC = () => {
+    const { getProducts, getCategories, categories, products, loading } = useProducts();
+
+    // Загружаем данные при монтировании компонента
+    useEffect(() => {
+        getProducts();
+        getCategories();
+    }, [getProducts, getCategories]);
+
     return (
         <>
             {/* Hero Section with fixed background */}
@@ -141,32 +151,35 @@ const Home = () => {
                 <section className="py-12 md:py-20">
                     <div className="container mx-auto px-4">
                         <h2 className="text-3xl font-bold text-center mb-12">Наша продукция</h2>
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {[
-                                { name: "Рыба", image: "/images/products/fish-category.jpg", slug: "fish" },
-                                { name: "Икра", image: "/images/products/caviar-category.jpg", slug: "caviar" },
-                                { name: "Морепродукты", image: "/images/products/seafood-category.jpg", slug: "seafood" }
-                            ].map((category) => (
-                                <Link to={`/products/${category.slug}`} className="group" key={category.slug}>
-                                    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-                                        <div className="w-full h-48 bg-gray-200 overflow-hidden">
-                                            <img
-                                                src={category.image}
-                                                alt={category.name}
-                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                                onError={(e) => {
-                                                    const fallback = "/images/products/default-category.jpg";
-                                                    (e.target as HTMLImageElement).src = fallback;
-                                                }}
-                                            />
+                        
+                        {loading ? (
+                            <div className="flex justify-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+                            </div>
+                        ) : (
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {categories.slice(0, 3).map((category) => (
+                                    <Link to={`/categories/${category.id}`} className="group" key={category.id}>
+                                        <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                                            <div className="w-full h-48 bg-gray-200 overflow-hidden">
+                                                <img
+                                                    src={`/images/products/${category.name.toLowerCase()}-category.jpg`}
+                                                    alt={category.name}
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    onError={(e) => {
+                                                        const fallback = "/images/products/default-category.jpg";
+                                                        (e.target as HTMLImageElement).src = fallback;
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="p-4 text-center">
+                                                <h3 className="text-xl font-bold">{category.name}</h3>
+                                            </div>
                                         </div>
-                                        <div className="p-4 text-center">
-                                            <h3 className="text-xl font-bold">{category.name}</h3>
-                                        </div>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
 
                         <div className="text-center mt-12">
                             <Link to="/products" className="btn-primary inline-block">
