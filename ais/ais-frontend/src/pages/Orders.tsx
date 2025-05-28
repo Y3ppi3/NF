@@ -15,7 +15,7 @@ import isBetween from 'dayjs/plugin/isBetween';
 import 'dayjs/locale/ru';
 import locale from 'antd/lib/date-picker/locale/ru_RU';
 import '../styles/Orders.css';
-import { apiClient } from '/src/services/api.ts';
+import { apiClient } from '../services/api';
 
 // Устанавливаем русскую локаль для dayjs и плагины
 dayjs.locale('ru');
@@ -231,11 +231,11 @@ const axiosInstance = useMemo(() => {
     try {
       // Массив возможных URL для заказов с разными префиксами
       const urls = [
-        '/api/orders',
-        '/orders',
-        '/api/orders/'
+        'http://127.0.0.1:8080/ais/api/orders',  // ✅ Работает
+        '/ais/api/orders',                       // Через прокси
+        'http://127.0.0.1:8001/ais/api/orders'   // Прямое подключение
       ];
-      
+
       let ordersData = null;
       let fetchSuccess = false;
       
