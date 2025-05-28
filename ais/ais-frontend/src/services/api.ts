@@ -6,7 +6,7 @@ export const CURRENT_DATE = '2025-05-25 19:37:40';
 export const CURRENT_USER = 'katarymba';
 
 // Базовые URL API с учетом Docker окружения
-export const API_BASE_URL = '/ais';
+export const API_BASE_URL = 'http://localhost:8080/ais';
 export const API_FULL_URL = `${API_BASE_URL}/api`;
 
 // API Gateway URL - обновляем на порт 8001

@@ -26,6 +26,7 @@ import '../styles/Warehouse.css';
 import StockManagement from './warehouse/StockManagement';
 import SupplyManagement from './warehouse/SupplyManagement';
 import StockMovements from './warehouse/StockMovements';
+import { API_FULL_URL } from '../services/api';
 
 // Import interfaces
 import {
@@ -115,12 +116,12 @@ const Warehouse: React.FC = () => {
         // Try direct axios call as fallback using both possible endpoints
         try {
           // Try with /api prefix first
-          const response = await axios.get(`${API_BASE_URL}/api/stock-movements`, getAxiosAuthConfig());
+          const response = await axios.get(`${API_FULL_URL}/api/stock-movements`, getAxiosAuthConfig());
           stockMovementsData = response.data;
         } catch (directError) {
           // Then try without /api prefix
           try {
-            const fallbackResponse = await axios.get(`${API_BASE_URL}/stock-movements`, getAxiosAuthConfig());
+            const fallbackResponse = await axios.get(`${API_FULL_URL}/stock-movements`, getAxiosAuthConfig());
             stockMovementsData = fallbackResponse.data;
           } catch (finalError) {
             console.error("All attempts to fetch stock movements failed:", finalError);
@@ -248,7 +249,7 @@ const Warehouse: React.FC = () => {
       }
 
       // Get actual data from our DB
-      const productsResponse = await axios.get(`${API_BASE_URL}/api/products`, getAxiosAuthConfig());
+      const productsResponse = await axios.get(`${API_FULL_URL}/api/products`, getAxiosAuthConfig());
 
       // Combine data
       const combinedProducts = mergeProductData(
@@ -260,7 +261,7 @@ const Warehouse: React.FC = () => {
       // Update products that have changed
       for (const product of combinedProducts) {
         if (product.sr_sync) {
-          await axios.put(`${API_BASE_URL}/api/products/${product.id}`, {
+          await axios.put(`${API_FULL_URL}/api/products/${product.id}`, {
             price: product.price,
             updated_at: new Date().toISOString()
           }, getAxiosAuthConfig());
@@ -275,7 +276,7 @@ const Warehouse: React.FC = () => {
 
             if (stockItem) {
               // Update existing stock record
-              await axios.patch(`${API_BASE_URL}/api/stocks/${stockItem.id}`, {
+              await axios.patch(`${API_FULL_URL}/api/stocks/${stockItem.id}`, {
                 quantity: product.sr_stock_quantity,
                 last_count_date: new Date().toISOString(),
                 last_counted_by: 'Север-Рыба Sync',
@@ -284,7 +285,7 @@ const Warehouse: React.FC = () => {
 
               // Try to create stock movement record
               try {
-                await axios.post(`${API_BASE_URL}/api/stock-movements`, {
+                await axios.post(`${API_FULL_URL}/api/stock-movements`, {
                   product_id: product.id,
                   warehouse_id: '1',
                   quantity: product.sr_stock_quantity - stockItem.quantity,
@@ -299,7 +300,7 @@ const Warehouse: React.FC = () => {
               }
             } else {
               // Create new stock record
-              await axios.post(`${API_BASE_URL}/api/stocks`, {
+              await axios.post(`${API_FULL_URL}/api/stocks`, {
                 product_id: product.id,
                 warehouse_id: '1',
                 quantity: product.sr_stock_quantity,
@@ -312,7 +313,7 @@ const Warehouse: React.FC = () => {
 
               // Try to create stock movement record
               try {
-                await axios.post(`${API_BASE_URL}/api/stock-movements`, {
+                await axios.post(`${API_FULL_URL}/api/stock-movements`, {
                   product_id: product.id,
                   warehouse_id: '1',
                   quantity: product.sr_stock_quantity,

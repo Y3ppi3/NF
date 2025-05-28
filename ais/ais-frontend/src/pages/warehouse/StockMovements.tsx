@@ -13,6 +13,7 @@ import {
     StockItem,
     StockMovement
 } from './interfaces';
+import {API_FULL_URL} from "../../services/api";
 
 interface StockMovementsProps {
     isLoading: boolean;
@@ -63,6 +64,11 @@ const StockMovements: React.FC<StockMovementsProps> = ({
 
     // Filtered movements
     const filteredMovements = useMemo(() => {
+        // Ensure stockMovements is an array before calling filter
+        if (!Array.isArray(stockMovements)) {
+            return [];
+        }
+
         return stockMovements.filter(movement => {
             // Filter by product
             if (filters.productId && movement.product_id !== filters.productId) {
@@ -129,7 +135,7 @@ const StockMovements: React.FC<StockMovementsProps> = ({
             };
 
             // Create movement in DB
-            await axios.post(`${API_BASE_URL}/stock-movements`, movementData);
+            await axios.post(`${API_FULL_URL}/stock-movements`, movementData);
 
             // Update stock
             if (stockItem) {
@@ -142,7 +148,7 @@ const StockMovements: React.FC<StockMovementsProps> = ({
                 }
 
                 // Update stock in DB
-                await axios.patch(`${API_BASE_URL}/stocks/${stockItem.id}`, {
+                await axios.patch(`${API_FULL_URL}/stocks/${stockItem.id}`, {
                     quantity: newQuantity,
                     last_count_date: getCurrentDateTime(),
                     last_counted_by: getCurrentUser()
@@ -152,7 +158,7 @@ const StockMovements: React.FC<StockMovementsProps> = ({
                 const product = products.find(p => p.id === newMovement.product_id);
 
                 if (product) {
-                    await axios.post(`${API_BASE_URL}/stocks`, {
+                    await axios.post(`${API_FULL_URL}/stocks`, {
                         product_id: newMovement.product_id,
                         warehouse_id: newMovement.warehouse_id,
                         quantity: newMovement.quantity,
