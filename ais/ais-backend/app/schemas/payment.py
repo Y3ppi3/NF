@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -23,9 +23,8 @@ class PaymentUpdate(BaseModel):
 class PaymentResponse(PaymentBase):
     id: int
     created_at: Optional[datetime] = None
-    
-    class Config:
-        orm_mode = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 # Модель для представления платежа в базе данных
 class PaymentInDB(PaymentResponse):
@@ -37,6 +36,5 @@ class PaymentListResponse(BaseModel):
     """Модель для ответа со списком платежей."""
     payments: List[PaymentResponse]
     total: int
-    
-    class Config:
-        orm_mode = True
+
+    model_config = ConfigDict(from_attributes=True)
