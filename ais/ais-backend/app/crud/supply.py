@@ -61,24 +61,105 @@ def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
 
 def create_supply(db: Session, supply: SupplyCreate, created_by: str):
     """
-    Создание новой поставки
+    Создание новой поставки с элементами
     """
+    # Проверяем существование поставщика
+    supplier = db.query(Supplier).filter(Supplier.id == supply.supplier_id).first()
+    if not supplier:
+        raise ValueError(f"Поставщик с ID {supply.supplier_id} не найден")
+
+    # Проверяем существование склада
+    warehouse = db.query(Warehouse).filter(Warehouse.id == supply.warehouse_id).first()
+    if not warehouse:
+        raise ValueError(f"Склад с ID {supply.warehouse_id} не найден")
+
+    # Создаем основную запись поставки
     db_supply = Supply(
         supplier_id=supply.supplier_id,
         warehouse_id=supply.warehouse_id,
-        order_date=supply.order_date or datetime.utcnow(),
-        expected_delivery=supply.expected_delivery,
-        status=supply.status or "pending",
-        total_amount=supply.total_amount or 0,
+        order_date=supply.shipment_date,  # Маппинг shipment_date -> order_date
+        expected_delivery=supply.expected_arrival_date,  # Маппинг expected_arrival_date -> expected_delivery
+        status=supply.status.value if hasattr(supply.status, 'value') else str(supply.status),
+        total_amount=0,  # Рассчитаем позже
         notes=supply.notes,
-        created_by=created_by  # Добавляем поле created_by
+        created_by=created_by,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
 
     db.add(db_supply)
-    db.commit()
-    db.refresh(db_supply)
-    return db_supply
+    db.flush()  # Чтобы получить ID
 
+    # Создаем элементы поставки
+    total_amount = 0
+    for item_data in supply.items:
+        # Проверяем существование продукта
+        product = db.query(Product).filter(Product.id == item_data.product_id).first()
+        if not product:
+            raise ValueError(f"Продукт с ID {item_data.product_id} не найден")
+
+        # Создаем элемент поставки
+        db_item = SupplyItem(
+            supply_id=db_supply.id,
+            product_id=item_data.product_id,
+            quantity_ordered=item_data.quantity_ordered,
+            unit_price=item_data.unit_price,
+            warehouse_id=item_data.warehouse_id,
+            is_received='f',  # По умолчанию не получен
+            notes=item_data.notes
+        )
+
+        db.add(db_item)
+        total_amount += item_data.quantity_ordered * item_data.unit_price
+
+    # Обновляем общую сумму
+    db_supply.total_amount = total_amount
+
+    db.commit()
+
+    # Загружаем созданную поставку с relationships
+    created_supply = db.query(Supply).filter(Supply.id == db_supply.id).options(
+        joinedload(Supply.items).joinedload(SupplyItem.product),
+        joinedload(Supply.warehouse),
+        joinedload(Supply.supplier)
+    ).first()
+
+    # Формируем объект ответа с правильным маппингом полей
+    response_data = {
+        "id": created_supply.id,
+        "supplier_id": created_supply.supplier_id,
+        "supplier": created_supply.supplier.name if created_supply.supplier else f"Supplier {created_supply.supplier_id}",
+        "warehouse_id": created_supply.warehouse_id,
+        "warehouse_name": created_supply.warehouse.name if created_supply.warehouse else None,
+        "status": created_supply.status,
+        "shipment_date": created_supply.order_date,  # Маппинг order_date -> shipment_date
+        "expected_arrival_date": created_supply.expected_delivery,  # Маппинг expected_delivery -> expected_arrival_date
+        "actual_arrival_date": created_supply.actual_arrival_date,
+        "reference_number": created_supply.reference_number,
+        "notes": created_supply.notes,
+        "total_amount": float(created_supply.total_amount),
+        "created_by": created_supply.created_by,
+        "created_at": created_supply.created_at,
+        "updated_at": created_supply.updated_at,
+        "items": [
+            {
+                "id": item.id,
+                "supply_id": item.supply_id,
+                "product_id": item.product_id,
+                "product_name": item.product.name if item.product else f"Product {item.product_id}",
+                "quantity_ordered": item.quantity_ordered,
+                "unit_price": float(item.unit_price),
+                "warehouse_id": item.warehouse_id,
+                "quantity_received": item.quantity_received,
+                "is_received": item.is_received == 't',
+                "received_date": item.received_date,
+                "notes": item.notes
+            }
+            for item in created_supply.items
+        ]
+    }
+
+    return response_data
 
 # Остальные функции остаются без изменений...
 def update_supply(db: Session, supply_id: int, supply_update: SupplyUpdate) -> Optional[Supply]:
@@ -135,25 +216,25 @@ def process_received_supply(db: Session, supply_id: int, username: str) -> bool:
     """
     Обработка полученной поставки путем создания движений запасов для каждого элемента.
     """
-    # Получаем поставку со всеми элементами
     supply = get_supply(db, supply_id)
-    if not supply or supply.status == "processed":
+    if not supply:
         return False
 
-    # Меняем статус поставки
+    # Обновляем статус поставки
     supply.status = "processed"
-    supply.updated_at = datetime.utcnow()
+    supply.actual_arrival_date = datetime.utcnow()
 
     # Обрабатываем каждый элемент поставки
     for item in supply.items:
-        # Создаем движение запасов для пополнения
+        # Создаем движение запасов
         stock_movement = StockMovementCreate(
             product_id=item.product_id,
-            quantity=item.quantity,
-            movement_type="receipt",
-            reference_id=supply.id,
-            notes=f"Поставка №{supply.id} от поставщика {supply.supplier_id}",
-            movement_date=datetime.utcnow()
+            warehouse_id=supply.warehouse_id,
+            quantity=item.quantity_ordered,
+            movement_type=StockMovementType.RECEIPT,
+            movement_date=datetime.utcnow(),
+            performed_by=username,
+            notes=f"Поступление по поставке #{supply.id}"
         )
 
         # Добавляем движение запасов и обновляем запасы
@@ -164,7 +245,7 @@ def process_received_supply(db: Session, supply_id: int, username: str) -> bool:
             db=db,
             product_id=item.product_id,
             warehouse_id=supply.warehouse_id,
-            quantity_change=item.quantity
+            quantity_change=item.quantity_ordered
         )
 
     db.commit()

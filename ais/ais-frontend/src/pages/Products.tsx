@@ -50,10 +50,16 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>('Операция выполнена успешно');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Используем контекст загрузки
   const { startLoading, stopLoading } = useLoading();
+
+  // Функция для получения базового URL API
+  const getApiBaseUrl = () => {
+    return 'http://localhost:8080/api';
+  };
 
 // Функция для загрузки категорий
   const fetchCategories = async () => {
@@ -61,7 +67,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
       console.log("Запрос категорий - начало");
 
       // Сначала попробуем получить категории из списка продуктов, так как этот эндпоинт работает
-      const productsEndpoint = "http://localhost:8080/ais/api/products";
+      const productsEndpoint = `${getApiBaseUrl()}/products`;
 
       try {
         console.log(`Получаем категории из списка продуктов: ${productsEndpoint}`);
@@ -131,10 +137,9 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
       }
 
       // Если не удалось получить категории из продуктов, пробуем еще несколько URL напрямую
-      // без использования прокси, так как все прокси-запросы завершаются ошибкой
       const directEndpoints = [
+        `${getApiBaseUrl()}/categories`,
         "http://localhost:8080/ais/api/categories",
-        "http://localhost:8080/api/categories",
         "http://localhost:8080/categories"
       ];
 
@@ -293,7 +298,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
     }
   };
 
-  // Обработчик удаления товара
+  // Обработчик удаления товара - расширенная версия с несколькими попытками
   const handleDelete = async (productId: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этот товар?')) {
       return;
@@ -301,21 +306,75 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
 
     try {
       startLoading();
+      
+      // Получаем URL, который успешно работает для GET запросов товаров
+      // Для этого вызовем метод getProducts и проанализируем его
+      let workingApiBaseUrl = '';
+      
+      try {
+        // Вызываем импортированную функцию getProducts и анализируем, какой URL она использует
+        console.log("Определяем рабочий URL API...");
+        
+        // Пробуем несколько возможных URL для DELETE запроса
+        const possibleUrls = [
+          'http://localhost:8080/api/products',
+          'http://localhost:8080/ais/api/products',
+          API_BASE_URL + '/products'
+        ];
+        
+        for (const url of possibleUrls) {
+          try {
+            console.log(`Проверка URL: ${url}`);
+            const authToken = token || localStorage.getItem('token');
+            const testResponse = await axios.get(`${url}`, {
+              headers: { Authorization: authToken ? `Bearer ${authToken}` : undefined }
+            });
+            if (testResponse.status === 200) {
+              workingApiBaseUrl = url;
+              console.log(`Обнаружен рабочий URL API: ${workingApiBaseUrl}`);
+              break;
+            }
+          } catch (e) {
+            console.log(`URL ${url} не работает`);
+          }
+        }
+      } catch (e) {
+        console.error("Не удалось определить рабочий URL:", e);
+        workingApiBaseUrl = 'http://localhost:8080/api/products'; // Используем URL из маршрутов бэкенда
+      }
+      
+      // Используем обнаруженный рабочий URL
+      const apiUrl = `${workingApiBaseUrl}/${productId}`;
+      console.log(`Отправка запроса DELETE на: ${apiUrl}`);
 
-      // Используем обратный прокси через Docker
-      const apiUrl = token
-          ? `${API_BASE_URL}/api/products/${productId}`
-          : `http://localhost:8080/ais/api/products/${productId}`;
-
-      await axios.delete(apiUrl, {
-        headers: { Authorization: `Bearer ${token || localStorage.getItem('token')}` }
+      const authToken = token || localStorage.getItem('token');
+      const response = await axios.delete(apiUrl, {
+        headers: { 
+          Authorization: authToken ? `Bearer ${authToken}` : undefined,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
       });
+      
+      console.log('Ответ при удалении:', response.data);
 
       // Обновляем список товаров после удаления
       await fetchProducts();
-    } catch (err) {
+      
+      // Показываем сообщение об успешном удалении
+      setSuccessMessage('Товар успешно удален');
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (err: any) {
       console.error('Ошибка при удалении товара:', err);
-      setError('Не удалось удалить товар. Пожалуйста, попробуйте позже.');
+      
+      // Подробный вывод ошибки с информацией из бэкенда
+      const errorMsg = err.response 
+        ? `Ошибка ${err.response.status}: ${err.response.data?.detail || err.response.statusText}` 
+        : 'Не удалось удалить товар. Пожалуйста, попробуйте позже.';
+        
+      setError(errorMsg);
+    } finally {
       stopLoading();
     }
   };
@@ -328,31 +387,44 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
       startLoading();
 
       const authToken = token || localStorage.getItem('token');
-      // Используем обратный прокси через Docker
-      const baseApiUrl = `${API_BASE_URL}/api/products`;
+      
+      // Используем URL без /ais, согласно маршрутам бэкенда
+      const baseApiUrl = 'http://localhost:8080/api/products';
+
+      // Добавим логирование для отладки
+      console.log('Сохраняем товар:', newProduct);
+      console.log('URL для запроса:', baseApiUrl + (editingProduct ? `/${editingProduct.id}` : ''));
 
       if (editingProduct) {
         // Редактирование существующего товара
-        await axios.put(
-            `${baseApiUrl}/${editingProduct.id}`,
-            newProduct,
-            { headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${authToken}`
-              }
+        const response = await axios.put(
+          `${baseApiUrl}/${editingProduct.id}`,
+          newProduct,
+          { 
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authToken ? `Bearer ${authToken}` : undefined
             }
+          }
         );
+        
+        console.log('Ответ сервера при редактировании:', response.data);
+        setSuccessMessage('Товар успешно обновлен');
       } else {
         // Добавление нового товара
-        await axios.post(
-            baseApiUrl,
-            newProduct,
-            { headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${authToken}`
-              }
+        const response = await axios.post(
+          baseApiUrl,
+          newProduct,
+          { 
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: authToken ? `Bearer ${authToken}` : undefined
             }
+          }
         );
+        
+        console.log('Ответ сервера при добавлении:', response.data);
+        setSuccessMessage('Новый товар успешно добавлен');
       }
 
       // Закрываем модальное окно и обновляем список товаров
@@ -368,9 +440,20 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
       });
 
       await fetchProducts();
-    } catch (err) {
+      
+      // Показываем уведомление об успешном сохранении
+      setShowSuccessMessage(true);
+      setTimeout(() => setShowSuccessMessage(false), 3000);
+    } catch (err: any) {
       console.error('Ошибка при сохранении товара:', err);
-      setError('Не удалось сохранить товар. Пожалуйста, проверьте введенные данные.');
+      
+      // Подробная информация об ошибке
+      const errorMsg = err.response 
+        ? `Ошибка ${err.response.status}: ${err.response.data?.detail || err.response.statusText}` 
+        : 'Не удалось сохранить товар. Пожалуйста, проверьте введенные данные.';
+        
+      setError(errorMsg);
+    } finally {
       stopLoading();
     }
   };
@@ -406,6 +489,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
       // Обновляем также список категорий
       await fetchCategories();
 
+      setSuccessMessage('Данные успешно синхронизированы с Север-Рыба');
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
@@ -546,6 +630,12 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
         {error && (
             <div className="notification notification-error">
               <p>{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="notification-close"
+              >
+                ×
+              </button>
             </div>
         )}
 
@@ -563,7 +653,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
 
         {showSuccessMessage && (
             <div className="fixed-notification notification-success">
-              <p>Данные успешно синхронизированы с Север-Рыба</p>
+              <p>{successMessage}</p>
             </div>
         )}
 
@@ -589,6 +679,9 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
                     <th onClick={() => handleSort('price')}>
                       Цена {sortBy === 'price' && (sortDirection === 'asc' ? '↑' : '↓')}
                     </th>
+                    <th onClick={() => handleSort('stock')}>
+                      Количество {sortBy === 'stock' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
                     <th>Действия</th>
                   </tr>
                   </thead>
@@ -612,6 +705,7 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
                         </td>
                         <td>{getCategoryName(product.category_id)}</td>
                         <td>{product.price.toLocaleString('ru-RU')} ₽</td>
+                        <td>{product.stock_quantity}</td>
                         <td>
                           <button
                               onClick={() => openEditModal(product)}
@@ -701,6 +795,20 @@ const Products: React.FC<ProductsProps> = ({ token }) => {
                           required
                           value={newProduct.price}
                           onChange={(e) => setNewProduct({...newProduct, price: parseFloat(e.target.value)})}
+                          className="form-control"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label form-label-required">
+                        Количество
+                      </label>
+                      <input
+                          type="number"
+                          min="0"
+                          required
+                          value={newProduct.stock_quantity}
+                          onChange={(e) => setNewProduct({...newProduct, stock_quantity: parseInt(e.target.value, 10)})}
                           className="form-control"
                       />
                     </div>

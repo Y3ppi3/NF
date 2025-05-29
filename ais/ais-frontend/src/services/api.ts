@@ -623,6 +623,17 @@ export const getSupplies = async () => {
     return trySeveralEndpoints(endpoints);
 };
 
+export const getSuppliers = async () => {
+    try {
+        const response = await axios.get(`${API_FULL_URL}/suppliers`, getAxiosAuthConfig());
+        return response.data;
+    } catch (error) {
+        console.error('Ошибка при получении поставщиков:', error);
+        throw error;
+    }
+};
+
+
 export const getStockMovements = async () => {
     const endpoints = [
         `http://localhost:8001/api/stock-movements/`,

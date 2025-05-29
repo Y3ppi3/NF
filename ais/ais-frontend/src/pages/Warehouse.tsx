@@ -26,7 +26,6 @@ import '../styles/Warehouse.css';
 import StockManagement from './warehouse/StockManagement';
 import SupplyManagement from './warehouse/SupplyManagement';
 import StockMovements from './warehouse/StockMovements';
-import { API_FULL_URL } from '../services/api';
 
 // Import interfaces
 import {
@@ -36,17 +35,20 @@ import {
   Category,
   Shipment,
   ShipmentItem,
-  StockMovement
+  StockMovement,
+  Supplier
 } from './warehouse/interfaces';
 
 // Import API constants and functions
 import {
   API_BASE_URL,
+  API_FULL_URL,
   getProducts,
   getStocks,
   getWarehouses,
   getCategories,
   getSupplies,
+  getSuppliers,
   getStockMovements,
   getAxiosAuthConfig
 } from '../services/api';
@@ -72,6 +74,7 @@ const Warehouse: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   // UI states
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -108,6 +111,11 @@ const Warehouse: React.FC = () => {
         return [];
       });
 
+      const suppliersData = await getSuppliers().catch(error => {
+        console.warn("Failed to fetch suppliers:", error);
+        return [];
+      });
+
       let stockMovementsData: any[] = [];
       try {
         stockMovementsData = await getStockMovements();
@@ -137,6 +145,7 @@ const Warehouse: React.FC = () => {
       setCategories(categoriesData);
       setShipments(suppliesData);
       setStockMovements(stockMovementsData);
+      setSuppliers(suppliersData);
 
       setError(null);
     } catch (err) {
@@ -564,6 +573,7 @@ const Warehouse: React.FC = () => {
                 products={products}
                 shipments={shipments}
                 warehouses={warehouses}
+                suppliers={suppliers}
                 fetchData={fetchData}
                 API_BASE_URL={`${API_BASE_URL}/api`}
                 getCurrentDateTime={getCurrentDateTime}

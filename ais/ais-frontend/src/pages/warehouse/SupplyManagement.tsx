@@ -10,6 +10,7 @@ import {
   Warehouse,
   Shipment,
   ShipmentItem,
+  Supplier,
   SHIPMENT_STATUSES
 } from './interfaces';
 
@@ -23,6 +24,7 @@ interface SupplyManagementProps {
   products: Product[];
   shipments: Shipment[];
   warehouses: Warehouse[];
+  suppliers: Supplier[];
   fetchData: () => Promise<void>;
   API_BASE_URL: string;
   getCurrentDateTime: () => string;
@@ -34,6 +36,7 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                                                              products,
                                                              shipments,
                                                              warehouses,
+                                                             suppliers,
                                                              fetchData,
                                                              API_BASE_URL,
                                                              getCurrentDateTime,
@@ -41,7 +44,7 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                                                            }) => {
   // State for new shipment
   const [newShipment, setNewShipment] = useState<Partial<Shipment>>({
-    supplier: '',
+    supplier_id: 0,
     shipment_date: getCurrentDateTime().split(' ')[0],
     expected_arrival_date: new Date(Date.now() + 86400000).toISOString().split('T')[0], // +1 day
     status: SHIPMENT_STATUSES.PLANNED,
@@ -77,7 +80,8 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
   }, [shipments]);
 
   const handleAddShipment = async () => {
-    if (!newShipment.supplier || !(newShipment.items || []).length || !newShipment.shipment_date) {
+    // Исправленная валидация - проверяем supplier_id вместо supplier
+    if (!newShipment.supplier_id || !(newShipment.items || []).length || !newShipment.shipment_date) {
       alert('Пожалуйста, заполните обязательные поля: Поставщик, Дата поставки, Товары');
       return;
     }
@@ -86,106 +90,104 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
       console.log("Начинаем отправку поставки:", newShipment);
       setIsSubmitting(true);
 
-      // Определяем warehouse_id из первого товара
+      // Определяем warehouse_id из первого товара или используем warehouse_id из основной формы
       const firstItem = (newShipment.items || [])[0] as ShipmentItem;
-      const warehouse_id = firstItem?.warehouse_id;
+      const warehouse_id = newShipment.warehouse_id || firstItem?.warehouse_id;
 
       if (!warehouse_id) {
-        alert('Не указан склад для товаров в поставке');
+        alert('Не указан склад для поставки');
         setIsSubmitting(false);
         return;
       }
 
-      // Подготовка данных с учетом требований API
+      const selectedSupplier = suppliers.find(s => s.id === Number(newShipment.supplier_id));
+
+      if (!selectedSupplier) {
+        alert('Выбранный поставщик не найден');
+        setIsSubmitting(false);
+        return;
+      }
+
       const shipmentData = {
-        supplier: newShipment.supplier,
-        warehouse_id: warehouse_id, // Важное поле, требуемое API
+        supplier_id: Number(newShipment.supplier_id),
+        warehouse_id: Number(warehouse_id),
         reference_number: newShipment.reference_number || null,
         notes: newShipment.notes || null,
+        status: (newShipment.status || 'PLANNED').toUpperCase(),
 
-        // Преобразование статуса в верхний регистр
-        status: (newShipment.status || 'planned').toUpperCase(), // Было: status: newShipment.status || 'planned'
-
-        // Форматирование дат
+        // Убедимся, что поле называется правильно и не пустое
         shipment_date: newShipment.shipment_date?.includes('T')
             ? newShipment.shipment_date
-            : `${newShipment.shipment_date}T00:00:00Z`,
+            : `${newShipment.shipment_date}T00:00:00.000Z`,
+
         expected_arrival_date: newShipment.expected_arrival_date?.includes('T')
             ? newShipment.expected_arrival_date
-            : newShipment.expected_arrival_date ? `${newShipment.expected_arrival_date}T00:00:00Z` : null,
+            : newShipment.expected_arrival_date ? `${newShipment.expected_arrival_date}T00:00:00.000Z` : null,
 
-        // Правильное форматирование товаров
         items: (newShipment.items || []).map(item => ({
-          product_id: parseInt(item.product_id), // Преобразуем в число
+          product_id: Number(item.product_id),
           quantity_ordered: Number(item.quantity_ordered),
           unit_price: Number(item.unit_price),
-          warehouse_id: item.warehouse_id,
+          warehouse_id: Number(item.warehouse_id),
           product_name: item.product_name || null
         }))
       };
 
       console.log("Подготовленные данные для отправки:", JSON.stringify(shipmentData, null, 2));
+
+      // Дополнительная валидация перед отправкой
+      if (!shipmentData.shipment_date) {
+        alert('Дата поставки обязательна');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!shipmentData.supplier_id) {
+        alert('Поставщик обязателен');
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log("Подготовленные данные для отправки:", JSON.stringify(shipmentData, null, 2));
       console.log("URL для отправки:", `${API_FULL_URL}/supplies/`);
 
-      // Попытка отправки с дополнительным логированием
-      try {
-        const response = await apiClient.post('/supplies/', shipmentData);
-        console.log("Поставка успешно создана:", response.data);
+      const response = await apiClient.post('/supplies/', shipmentData);
+      console.log("Поставка успешно создана:", response.data);
 
-        // Обновляем данные
-        await fetchData();
+      // Обновляем данные
+      await fetchData();
 
-        // Очищаем форму и закрываем модальное окно
-        setNewShipment({
-          supplier: '',
-          shipment_date: getCurrentDateTime().split(' ')[0],
-          expected_arrival_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-          status: 'planned',
-          created_by: getCurrentUser(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          items: []
-        });
+      // Сбрасываем форму
+      setNewShipment({
+        supplier_id: 0,
+        warehouse_id: '1',
+        shipment_date: getCurrentDateTime().split(' ')[0],
+        expected_arrival_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        status: 'PLANNED',
+        reference_number: '',
+        notes: '',
+        items: []
+      });
 
-        setShowAddShipmentModal(false);
-        alert('Поставка успешно добавлена!');
-      } catch (apiError) {
-        // Используем нашу функцию для детального логирования
-        const errorDetails = logAPIError(apiError);
+      setShowAddShipmentModal(false);
+      alert('Поставка успешно добавлена!');
 
-        // Формируем понятное сообщение для пользователя
-        let errorMessage = "Ошибка при добавлении поставки: ";
+    } catch (apiError: any) {
+      console.error('Ошибка при создании поставки:', apiError);
 
-        if (errorDetails.response && errorDetails.response.data) {
-          if (errorDetails.response.data.detail && Array.isArray(errorDetails.response.data.detail)) {
-            // Обработка детальных ошибок валидации
-            const validationErrors = errorDetails.response.data.detail.map((e: any) => {
-              const field = e.loc[e.loc.length - 1];
-              return `${field}: ${e.msg}`;
-            }).join('\n');
-
-            errorMessage += `\nПроблемы с данными:\n${validationErrors}`;
-          } else if (typeof errorDetails.response.data === 'string') {
-            errorMessage += errorDetails.response.data;
-          } else if (errorDetails.response.data.detail) {
-            errorMessage += errorDetails.response.data.detail;
-          } else {
-            errorMessage += `Код ошибки: ${errorDetails.response.status}`;
-          }
-        } else {
-          errorMessage += apiError.message || "Неизвестная ошибка";
-        }
-
-        alert(errorMessage);
+      if (apiError.response?.data?.detail) {
+        const errorDetails = Array.isArray(apiError.response.data.detail)
+            ? apiError.response.data.detail.map((err: any) => `Поле: ${err.loc?.join('.')}, Ошибка: ${err.msg}`).join('\n')
+            : apiError.response.data.detail;
+        console.error("Детали ошибки:", errorDetails);
+        alert(`Ошибка валидации:\n${errorDetails}`);
+      } else {
+        alert('Произошла ошибка при создании поставки. Проверьте данные и попробуйте снова.');
       }
-    } catch (err: any) {
-      console.error("Общая ошибка:", err);
-      alert(`Произошла ошибка: ${err.message || "Неизвестная ошибка"}`);
     } finally {
       setIsSubmitting(false);
     }
-  };  // Add shipment item handler
-
+  };
 
   const handleAddShipmentItem = () => {
     if (!newShipmentItem.product_id || !newShipmentItem.quantity_ordered || !newShipmentItem.unit_price || !newShipmentItem.warehouse_id) {
@@ -496,22 +498,30 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                   <div className="px-6 py-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div>
-                        <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="supplier"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Поставщик <span className="text-red-500">*</span>
                         </label>
-                        <input
-                            type="text"
+                        <select
                             id="supplier"
-                            value={newShipment.supplier || ''}
-                            onChange={(e) => setNewShipment({...newShipment, supplier: e.target.value})}
+                            value={newShipment.supplier_id || ''}
+                            onChange={(e) => setNewShipment({...newShipment, supplier_id: Number(e.target.value)})}
                             className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600
-                          bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
-                            placeholder="Название поставщика"
-                        />
+                      bg-white dark:bg-gray-700 text-gray-800 dark:text-white"
+                        >
+                          <option value="">Выберите поставщика</option>
+                          {suppliers.filter(supplier => supplier.is_active).map(supplier => (
+                              <option key={supplier.id} value={supplier.id}>
+                                {supplier.name}
+                                {supplier.contact_person && ` (${supplier.contact_person})`}
+                              </option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
-                        <label htmlFor="reference-number" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="reference-number"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Номер заказа / документа
                         </label>
                         <input
@@ -526,7 +536,8 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                       </div>
 
                       <div>
-                        <label htmlFor="shipment-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="shipment-date"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Дата поставки <span className="text-red-500">*</span>
                         </label>
                         <input
@@ -540,7 +551,8 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                       </div>
 
                       <div>
-                        <label htmlFor="expected-arrival-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="expected-arrival-date"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Ожидаемая дата прибытия
                         </label>
                         <input
@@ -554,7 +566,8 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                       </div>
 
                       <div className="md:col-span-2">
-                        <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="notes"
+                               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                           Примечания
                         </label>
                         <textarea
@@ -582,7 +595,8 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           {/* Селект для выбора товара */}
                           <div>
-                            <label htmlFor="item-product" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="item-product"
+                                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Товар <span className="text-red-500">*</span>
                             </label>
                             <select
