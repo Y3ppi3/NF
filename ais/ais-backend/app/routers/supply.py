@@ -25,18 +25,18 @@ router = APIRouter(
 def get_supplies(
         skip: int = 0,
         limit: int = 100,
-        supplier: Optional[str] = None,
+        supplier_id: Optional[int] = None,  # Изменено с supplier
         warehouse_id: Optional[int] = None,
         status: Optional[str] = None,
         db: Session = Depends(get_db),
-        current_admin: Administrator = Depends(get_current_admin)  # Используем get_current_admin
+        current_admin: Administrator = Depends(get_current_admin)
 ):
     """
     Получение списка поставок с возможностью фильтрации.
     """
     supplies = supply_crud.get_supplies(
         db, skip=skip, limit=limit,
-        supplier=supplier, warehouse_id=warehouse_id, status=status
+        supplier_id=supplier_id, warehouse_id=warehouse_id, status=status  # Исправлено
     )
     return supplies
 

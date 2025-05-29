@@ -3,18 +3,18 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
-from app.models import Supply, SupplyItem, Product, Warehouse, StockMovement
+from app.models import Supply, SupplyItem, Product, Warehouse, StockMovement, Supplier
 from app.schemas import SupplyCreate, SupplyUpdate, SupplyItemUpdate, StockMovementCreate
 from app.models.enums import SupplyStatus, StockMovementType
 from app.crud.stock_movement import create_stock_movement
-from app.crud.stock import update_product_stock  # Оставляем только один импорт
+from app.crud.stock import update_product_stock
 
 
 def get_supplies(
         db: Session,
         skip: int = 0,
         limit: int = 100,
-        supplier_id: Optional[int] = None,  # Изменено с supplier на supplier_id
+        supplier_id: Optional[int] = None,
         warehouse_id: Optional[int] = None,
         status: Optional[str] = None,
         filters: Dict = None,
@@ -61,15 +61,29 @@ def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
 
 def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
     """Создание новой поставки с элементами"""
+
+    # Определяем supplier_id
+    supplier_id = None
+    if supply.supplier_id:
+        supplier_id = supply.supplier_id
+    elif supply.supplier:
+        # Ищем поставщика по имени
+        supplier = db.query(Supplier).filter(Supplier.name == supply.supplier).first()
+        if not supplier:
+            raise ValueError(f"Поставщик с именем '{supply.supplier}' не найден")
+        supplier_id = supplier.id
+    else:
+        raise ValueError("Необходимо указать supplier_id или supplier")
+
     # Создаем запись поставки
     db_supply = Supply(
-        supplier=supply.supplier_id,  # Изменено
+        supplier_id=supplier_id,  # Исправлено
         warehouse_id=supply.warehouse_id,
-        order_date=supply.order_date,  # Изменено
-        expected_delivery=supply.expected_delivery,  # Изменено
-        status=supply.status,
-        total_amount=supply.total_amount,  # Добавлено
+        order_date=supply.shipment_date,  # Исправлено соответствие полей
+        expected_delivery=supply.expected_arrival_date,  # Исправлено
+        status=supply.status.value if hasattr(supply.status, 'value') else supply.status,
         notes=supply.notes,
+        created_by=username,  # Добавлено поле created_by
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
@@ -82,7 +96,7 @@ def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
         db_item = SupplyItem(
             supply_id=db_supply.id,
             product_id=item.product_id,
-            quantity=item.quantity,  # Изменено
+            quantity=item.quantity_ordered,  # Исправлено соответствие полей
             unit_price=item.unit_price,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
@@ -94,6 +108,7 @@ def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
     return db_supply
 
 
+# Остальные функции остаются без изменений...
 def update_supply(db: Session, supply_id: int, supply_update: SupplyUpdate) -> Optional[Supply]:
     """Обновление существующей поставки"""
     db_supply = get_supply(db, supply_id)

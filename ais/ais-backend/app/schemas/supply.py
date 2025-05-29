@@ -1,6 +1,6 @@
 # app/schemas/supply.py
 from pydantic import Field, ConfigDict, BaseModel, Field, ConfigDict
-from typing import Optional, List, ForwardRef
+from typing import Optional, List, ForwardRef, Union
 from datetime import datetime
 from app.schemas.enums import SupplyStatus
 
@@ -42,7 +42,9 @@ class SupplyItem(SupplyItemInDB):
 
 
 class SupplyBase(BaseModel):
-    supplier: str = Field(..., min_length=2, max_length=100)
+    # Поддерживаем как supplier_id, так и supplier для обратной совместимости
+    supplier_id: Optional[int] = None
+    supplier: Optional[str] = Field(None, min_length=2, max_length=100)
     warehouse_id: int
     status: SupplyStatus = Field(default=SupplyStatus.PLANNED)
     shipment_date: datetime
@@ -56,6 +58,7 @@ class SupplyCreate(SupplyBase):
 
 
 class SupplyUpdate(BaseModel):
+    supplier_id: Optional[int] = None
     supplier: Optional[str] = Field(None, min_length=2, max_length=100)
     warehouse_id: Optional[int] = None
     status: Optional[SupplyStatus] = None
