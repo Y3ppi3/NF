@@ -27,7 +27,7 @@ const { RangePicker } = DatePicker;
 const { TextArea } = Input;
 
 // Константы для работы с датами
-const CURRENT_DATE = '2025-05-24 12:03:58';
+const CURRENT_DATE = '2025-05-28 17:31:22';
 const CURRENT_USER = 'katarymba';
 
 // Доступные курьеры
@@ -893,21 +893,31 @@ const axiosInstance = useMemo(() => {
     }
   ];
 
-  // Рендер компонента
   return (
     <div className="orders-page">
       {/* Заголовок страницы */}
       <div className="page-header">
-        <Title level={2}>Управление заказами</Title>
-        <Text type="secondary">
-          {dayjs(CURRENT_DATE).format('DD MMMM YYYY')} | {orders.length} заказов в базе данных
-        </Text>
+        <div className="header-title">
+          <Title level={2}>Управление заказами</Title>
+          <Text type="secondary">
+            {dayjs(CURRENT_DATE).format('DD MMMM YYYY')} | {orders.length} заказов в базе данных
+          </Text>
+        </div>
+        <Button 
+          type="primary"
+          size="large"
+          icon={<PlusOutlined />}
+          onClick={() => setPaymentModalVisible(true)}
+          className="create-button"
+        >
+          Создать платеж
+        </Button>
       </div>
 
       {/* Информационная панель */}
-      <Card style={{ marginBottom: '16px' }} type="inner">
+      <Card className="info-card" type="inner">
         <Space>
-          <CheckCircleOutlined style={{ color: '#52c41a' }} />
+          <CheckCircleOutlined className="info-icon" />
           <Text strong>
             Сейчас: {CURRENT_DATE}, Пользователь: {CURRENT_USER}.
             Полуавтоматический режим активен. При оплате заказа автоматически назначается курьер и обновляется статус.
@@ -935,83 +945,88 @@ const axiosInstance = useMemo(() => {
       </div>
 
       {/* Панель фильтров */}
-      <Card style={{ marginBottom: '16px' }}>
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={8}>
-            <Input
-              placeholder="Поиск по заказу, клиенту или адресу"
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              allowClear
-            />
-          </Col>
-          <Col xs={12} md={4}>
-            <Select
-              placeholder="Статус заказа"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              <Option value="pending">Ожидает обработки</Option>
-              <Option value="processing">В обработке</Option>
-              <Option value="shipped">Отправлен</Option>
-              <Option value="in_transit">В пути</Option>
-              <Option value="delivered">Доставлен</Option>
-              <Option value="cancelled">Отменен</Option>
-            </Select>
-          </Col>
-          <Col xs={12} md={4}>
-            <Select
-              placeholder="Статус оплаты"
-              value={paymentStatusFilter}
-              onChange={setPaymentStatusFilter}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              <Option value="pending">Ожидает оплаты</Option>
-              <Option value="processing">Обрабатывается</Option>
-              <Option value="completed">Оплачен</Option>
-              <Option value="failed">Ошибка оплаты</Option>
-              <Option value="refunded">Возврат средств</Option>
-            </Select>
-          </Col>
-          <Col xs={12} md={5}>
-            <RangePicker
-              format="DD.MM.YYYY"
-              placeholder={['Дата с', 'Дата по']}
-              value={dateRange}
-              onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null])}
-              allowClear
-              style={{ width: '100%' }}
-            />
-          </Col>
-          <Col xs={12} md={3}>
-            <Space>
-              <Button
-                type="primary"
-                icon={<ReloadOutlined />}
-                onClick={fetchOrders}
-                loading={loading}
+      <Card className="filter-card">
+        <div className="filter-container">
+          <Row gutter={[8, 8]} align="middle" justify="space-between">
+            <Col xs={24} md={8} lg={8}>
+              <Input
+                placeholder="Поиск по заказу, клиенту или адресу"
+                prefix={<SearchOutlined />}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                allowClear
+                className="search-input"
+              />
+            </Col>
+            <Col xs={12} md={4} lg={4}>
+              <Select
+                placeholder="Статус заказа"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                allowClear
+                className="status-select"
               >
-                Обновить
-              </Button>
-              <Button
-                icon={<FilterOutlined />}
-                onClick={clearFilters}
+                <Option value="pending">Ожидает обработки</Option>
+                <Option value="processing">В обработке</Option>
+                <Option value="shipped">Отправлен</Option>
+                <Option value="in_transit">В пути</Option>
+                <Option value="delivered">Доставлен</Option>
+                <Option value="cancelled">Отменен</Option>
+              </Select>
+            </Col>
+            <Col xs={12} md={4} lg={4}>
+              <Select
+                placeholder="Статус оплаты"
+                value={paymentStatusFilter}
+                onChange={setPaymentStatusFilter}
+                allowClear
+                className="payment-status-select"
               >
-                Сбросить
-              </Button>
-            </Space>
-          </Col>
-        </Row>
+                <Option value="pending">Ожидает оплаты</Option>
+                <Option value="processing">Обрабатывается</Option>
+                <Option value="completed">Оплачен</Option>
+                <Option value="failed">Ошибка оплаты</Option>
+                <Option value="refunded">Возврат средств</Option>
+              </Select>
+            </Col>
+            <Col xs={12} md={5} lg={5}>
+              <RangePicker
+                format="DD.MM.YYYY"
+                placeholder={['Дата с', 'Дата по']}
+                value={dateRange}
+                onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null])}
+                allowClear
+                className="date-range-picker"
+                locale={locale}
+              />
+            </Col>
+            <Col xs={12} md={3} lg={3}>
+              <div className="filter-actions">
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={fetchOrders}
+                  loading={loading}
+                  className="refresh-button"
+                >
+                  Обновить
+                </Button>
+                <Button
+                  icon={<FilterOutlined />}
+                  onClick={clearFilters}
+                  className="clear-button"
+                >
+                  Сбросить
+                </Button>
+              </div>
+            </Col>
+          </Row>
+        </div>
       </Card>
 
       {/* Таблица заказов */}
-      <Card>
+      <Card className="table-card">
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '50px 0' }}>
+          <div className="loading-container">
             <Spin size="large" />
           </div>
         ) : (
@@ -1025,7 +1040,8 @@ const axiosInstance = useMemo(() => {
               pageSizeOptions: ['10', '20', '50'],
               showTotal: (total) => `Всего ${total} заказов`
             }}
-            scroll={{ x: 'max-content' }}
+            className="orders-table"
+            size="middle"
           />
         )}
       </Card>
@@ -1049,6 +1065,7 @@ const axiosInstance = useMemo(() => {
             <Button
               type="primary"
               onClick={() => orderDetails && printOrder(orderDetails.id)}
+              className="print-button"
             >
               Печать
             </Button>
@@ -1057,7 +1074,7 @@ const axiosInstance = useMemo(() => {
       >
         {orderDetails && (
           <div>
-            <Card title="Основная информация" style={{ marginBottom: '16px' }}>
+            <Card title="Основная информация" className="detail-card">
               <p><strong>Дата создания:</strong> {formatDate(orderDetails.created_at)}</p>
               <p>
                 <strong>Статус заказа:</strong> {' '}
@@ -1085,7 +1102,7 @@ const axiosInstance = useMemo(() => {
               <p><strong>Общая сумма:</strong> {formatPrice(orderDetails.total_amount)}</p>
             </Card>
             
-            <Card title="Клиент" style={{ marginBottom: '16px' }}>
+            <Card title="Клиент" className="detail-card">
               <p><strong>Имя:</strong> {orderDetails.name || 'Не указано'}</p>
               <p><strong>ID пользователя:</strong> {orderDetails.user_id}</p>
               <p><strong>Телефон:</strong> {orderDetails.phone || 'Не указан'}</p>
@@ -1094,7 +1111,7 @@ const axiosInstance = useMemo(() => {
               <p><strong>Комментарий:</strong> {orderDetails.comment || 'Нет комментария'}</p>
             </Card>
             
-            <Card title="Оплата" style={{ marginBottom: '16px' }}>
+            <Card title="Оплата" className="detail-card">
               <p><strong>Способ оплаты:</strong> {getPaymentMethodText(orderDetails.payment_method)}</p>
               <p>
                 <strong>Статус оплаты:</strong> {' '}
@@ -1120,7 +1137,7 @@ const axiosInstance = useMemo(() => {
               </p>
             </Card>
             
-            <Card title="Доставка" style={{ marginBottom: '16px' }}>
+            <Card title="Доставка" className="detail-card">
               <p>
                 <strong>Курьер:</strong> {orderDetails.courier_name || 'Не назначен'}
                 {!orderDetails.courier_name && (
@@ -1239,6 +1256,7 @@ const axiosInstance = useMemo(() => {
             <DatePicker
               format="DD.MM.YYYY"
               style={{ width: '100%' }}
+              locale={locale}
             />
           </Form.Item>
           
@@ -1250,6 +1268,7 @@ const axiosInstance = useMemo(() => {
               format="DD.MM.YYYY"
               showTime
               style={{ width: '100%' }}
+              locale={locale}
             />
           </Form.Item>
           
@@ -1268,6 +1287,7 @@ const axiosInstance = useMemo(() => {
         open={paymentModalVisible}
         onCancel={() => setPaymentModalVisible(false)}
         footer={null}
+        className="payment-modal"
       >
         <Form
           form={paymentForm}
@@ -1330,7 +1350,7 @@ const axiosInstance = useMemo(() => {
           </Form.Item>
 
           <Form.Item>
-            <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Space className="form-actions">
               <Button onClick={() => setPaymentModalVisible(false)}>
                 Отмена
               </Button>
@@ -1341,6 +1361,155 @@ const axiosInstance = useMemo(() => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Добавляем CSS для стилизации компонентов */}
+      <style jsx>{`
+        .orders-page {
+          max-width: 100%;
+          padding: 20px;
+          margin: 0 auto;
+        }
+        
+        .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+        
+        .header-title {
+          flex: 1;
+        }
+        
+        .create-button {
+          background-color: #0e6eab;
+          border-color: #0e6eab;
+          margin-left: 16px;
+        }
+        
+        .info-card {
+          margin-bottom: 16px;
+        }
+        
+        .info-icon {
+          color: #52c41a;
+        }
+        
+        .stats-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+        
+        .stat-card {
+          flex: 1;
+          min-width: 140px;
+        }
+        
+        .statistic-container {
+          text-align: center;
+        }
+        
+        .statistic-title {
+          font-size: 14px;
+          color: rgba(0, 0, 0, 0.45);
+          margin-bottom: 4px;
+        }
+        
+        .statistic-value {
+          font-size: 24px;
+          font-weight: 600;
+          color: rgba(0, 0, 0, 0.85);
+        }
+        
+        .filter-card {
+          margin-bottom: 16px;
+          border-radius: 8px;
+        }
+        
+        .filter-container {
+          padding: 5px 0;
+        }
+        
+        .search-input,
+        .status-select,
+        .payment-status-select,
+        .date-range-picker {
+          width: 100%;
+        }
+        
+        .filter-actions {
+          display: flex;
+          gap: 8px;
+          justify-content: flex-end;
+        }
+        
+        .refresh-button,
+        .clear-button {
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          height: 32px;
+        }
+        
+        .table-card {
+          border-radius: 8px;
+        }
+        
+        .loading-container {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          height: 300px;
+        }
+        
+        .detail-card {
+          margin-bottom: 16px;
+        }
+        
+        .orders-table {
+          margin-top: 0;
+        }
+        
+        .print-button {
+          background-color: #0e6eab;
+          border-color: #0e6eab;
+        }
+        
+        .payment-modal .form-actions {
+          display: flex;
+          justify-content: flex-end;
+          width: 100%;
+        }
+        
+        /* Адаптивные стили */
+        @media (max-width: 768px) {
+          .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          
+          .create-button {
+            margin-top: 16px;
+            margin-left: 0;
+            width: 100%;
+          }
+          
+          .stats-row {
+            flex-direction: column;
+          }
+          
+          .stat-card {
+            width: 100%;
+          }
+          
+          .filter-actions {
+            margin-top: 8px;
+            width: 100%;
+          }
+        }
+      `}</style>
     </div>
   );
 };
