@@ -289,8 +289,8 @@ alembic upgrade head
 ## 📇 Базовые данные для входа
 
 #### AIS (административная панель)
-- Username: main_admin
-- Password: qwerty123
+- Username: admin
+- Password: admin123
 
 
 ## 📄 Лицензия
