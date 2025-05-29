@@ -59,50 +59,22 @@ def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
     ).first()
 
 
-def create_supply(db: Session, supply: SupplyCreate, username: str) -> Supply:
-    """Создание новой поставки с элементами"""
-
-    # Определяем supplier_id
-    supplier_id = None
-    if supply.supplier_id:
-        supplier_id = supply.supplier_id
-    elif supply.supplier:
-        # Ищем поставщика по имени
-        supplier = db.query(Supplier).filter(Supplier.name == supply.supplier).first()
-        if not supplier:
-            raise ValueError(f"Поставщик с именем '{supply.supplier}' не найден")
-        supplier_id = supplier.id
-    else:
-        raise ValueError("Необходимо указать supplier_id или supplier")
-
-    # Создаем запись поставки
+def create_supply(db: Session, supply: SupplyCreate, created_by: str):
+    """
+    Создание новой поставки
+    """
     db_supply = Supply(
-        supplier_id=supplier_id,  # Исправлено
+        supplier_id=supply.supplier_id,
         warehouse_id=supply.warehouse_id,
-        order_date=supply.shipment_date,  # Исправлено соответствие полей
-        expected_delivery=supply.expected_arrival_date,  # Исправлено
-        status=supply.status.value if hasattr(supply.status, 'value') else supply.status,
+        order_date=supply.order_date or datetime.utcnow(),
+        expected_delivery=supply.expected_delivery,
+        status=supply.status or "pending",
+        total_amount=supply.total_amount or 0,
         notes=supply.notes,
-        created_by=username,  # Добавлено поле created_by
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        created_by=created_by  # Добавляем поле created_by
     )
+
     db.add(db_supply)
-    db.flush()  # Получаем ID поставки
-
-    # Добавляем элементы поставки
-    for item in supply.items:
-        # Создаем элемент поставки
-        db_item = SupplyItem(
-            supply_id=db_supply.id,
-            product_id=item.product_id,
-            quantity=item.quantity_ordered,  # Исправлено соответствие полей
-            unit_price=item.unit_price,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-        db.add(db_item)
-
     db.commit()
     db.refresh(db_supply)
     return db_supply

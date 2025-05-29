@@ -25,6 +25,7 @@ class Supply(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default="now()")
     updated_at = Column(DateTime, nullable=False, server_default="now()")
+    created_by = Column(String(100), nullable=False, index=True, server_default="system")
 
     # Связи
     supplier = relationship("Supplier", back_populates="supplies")
@@ -38,11 +39,14 @@ class SupplyItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     supply_id = Column(Integer, ForeignKey("supplies.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-    quantity = Column('quantity', Numeric, nullable=False)  # Используем Numeric вместо Double
+    quantity_ordered = Column(Integer, nullable=False)
     unit_price = Column(Numeric(10, 2), nullable=False)
-    created_at = Column(DateTime, nullable=False, server_default="now()")
-    updated_at = Column(DateTime, nullable=False, server_default="now()")
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False)
+    is_received = Column(String(1), nullable=False, default="false")
+    received_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
 
     # Связи
     supply = relationship("Supply", back_populates="items")
     product = relationship("Product", back_populates="supply_items")
+    warehouse = relationship("Warehouse")

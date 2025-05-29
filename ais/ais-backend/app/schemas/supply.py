@@ -42,8 +42,7 @@ class SupplyItem(SupplyItemInDB):
 
 
 class SupplyBase(BaseModel):
-    # Поддерживаем как supplier_id, так и supplier для обратной совместимости
-    supplier_id: Optional[int] = None
+    supplier_id: int
     supplier: Optional[str] = Field(None, min_length=2, max_length=100)
     warehouse_id: int
     status: SupplyStatus = Field(default=SupplyStatus.PLANNED)
@@ -54,7 +53,7 @@ class SupplyBase(BaseModel):
 
 
 class SupplyCreate(SupplyBase):
-    items: List[SupplyItemCreate]
+        items: List[SupplyItemCreate]
 
 
 class SupplyUpdate(BaseModel):
