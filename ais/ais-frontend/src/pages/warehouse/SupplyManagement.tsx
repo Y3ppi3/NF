@@ -115,7 +115,6 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
         notes: newShipment.notes || null,
         status: (newShipment.status || 'PLANNED').toUpperCase(),
 
-        // Убедимся, что поле называется правильно и не пустое
         shipment_date: newShipment.shipment_date?.includes('T')
             ? newShipment.shipment_date
             : `${newShipment.shipment_date}T00:00:00.000Z`,
@@ -132,21 +131,6 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
           product_name: item.product_name || null
         }))
       };
-
-      console.log("Подготовленные данные для отправки:", JSON.stringify(shipmentData, null, 2));
-
-      // Дополнительная валидация перед отправкой
-      if (!shipmentData.shipment_date) {
-        alert('Дата поставки обязательна');
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (!shipmentData.supplier_id) {
-        alert('Поставщик обязателен');
-        setIsSubmitting(false);
-        return;
-      }
 
       console.log("Подготовленные данные для отправки:", JSON.stringify(shipmentData, null, 2));
       console.log("URL для отправки:", `${API_FULL_URL}/supplies/`);

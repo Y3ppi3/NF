@@ -19,7 +19,7 @@ def get_supplies(
         status: Optional[str] = None,
         filters: Dict = None,
         date_filter: Dict = None
-) -> List[Supply]:
+) -> List[Dict]:
     """Получение списка поставок с возможностью фильтрации"""
     query = db.query(Supply)
 
@@ -44,19 +44,105 @@ def get_supplies(
         query = query.filter(Supply.order_date <= date_filter["end"])
 
     # Загружаем связанные данные для оптимизации запросов
-    query = query.options(joinedload(Supply.items), joinedload(Supply.warehouse), joinedload(Supply.supplier))
+    query = query.options(
+        joinedload(Supply.items).joinedload(SupplyItem.product),
+        joinedload(Supply.warehouse),
+        joinedload(Supply.supplier)
+    )
 
     # Применяем пагинацию и сортировку
-    return query.order_by(Supply.created_at.desc()).offset(skip).limit(limit).all()
+    supplies = query.order_by(Supply.created_at.desc()).offset(skip).limit(limit).all()
+
+    # Формируем список ответов с правильными полями
+    result = []
+    for supply in supplies:
+        supply_data = {
+            "id": supply.id,
+            "supplier_id": supply.supplier_id,
+            "supplier": supply.supplier.name if supply.supplier else f"Supplier {supply.supplier_id}",
+            "warehouse_id": supply.warehouse_id,
+            "warehouse_name": supply.warehouse.name if supply.warehouse else None,
+            "status": supply.status,
+            "order_date": supply.order_date,  # Используем правильное имя поля из БД
+            "shipment_date": supply.order_date,  # Дублируем для совместимости
+            "expected_delivery": supply.expected_delivery,  # Используем правильное имя поля из БД
+            "expected_arrival_date": supply.expected_delivery,  # Дублируем для совместимости
+            "actual_arrival_date": getattr(supply, 'actual_arrival_date', None),
+            "reference_number": getattr(supply, 'reference_number', None),
+            "notes": supply.notes,
+            "total_amount": float(supply.total_amount),
+            "created_by": supply.created_by,
+            "created_at": supply.created_at,
+            "updated_at": supply.updated_at,
+            "items": [
+                {
+                    "id": item.id,
+                    "supply_id": item.supply_id,
+                    "product_id": item.product_id,
+                    "product_name": item.product.name if item.product else f"Product {item.product_id}",
+                    "quantity_ordered": item.quantity_ordered,
+                    "unit_price": float(item.unit_price),
+                    "warehouse_id": item.warehouse_id,
+                    "quantity_received": None,  # Пока нет поля в БД, используем None
+                    "is_received": item.is_received == 't',
+                    "received_date": item.received_date,
+                    "notes": item.notes
+                }
+                for item in supply.items
+            ]
+        }
+        result.append(supply_data)
+
+    return result
 
 
-def get_supply(db: Session, supply_id: int) -> Optional[Supply]:
+def get_supply(db: Session, supply_id: int) -> Optional[Dict]:
     """Получение поставки по ID"""
-    return db.query(Supply).filter(Supply.id == supply_id).options(
+    supply = db.query(Supply).filter(Supply.id == supply_id).options(
         joinedload(Supply.items).joinedload(SupplyItem.product),
         joinedload(Supply.warehouse),
         joinedload(Supply.supplier)
     ).first()
+
+    if not supply:
+        return None
+
+    # Формируем объект ответа с правильными полями
+    return {
+        "id": supply.id,
+        "supplier_id": supply.supplier_id,
+        "supplier": supply.supplier.name if supply.supplier else f"Supplier {supply.supplier_id}",
+        "warehouse_id": supply.warehouse_id,
+        "warehouse_name": supply.warehouse.name if supply.warehouse else None,
+        "status": supply.status,
+        "order_date": supply.order_date,
+        "shipment_date": supply.order_date,
+        "expected_delivery": supply.expected_delivery,
+        "expected_arrival_date": supply.expected_delivery,
+        "actual_arrival_date": getattr(supply, 'actual_arrival_date', None),
+        "reference_number": getattr(supply, 'reference_number', None),
+        "notes": supply.notes,
+        "total_amount": float(supply.total_amount),
+        "created_by": supply.created_by,
+        "created_at": supply.created_at,
+        "updated_at": supply.updated_at,
+        "items": [
+            {
+                "id": item.id,
+                "supply_id": item.supply_id,
+                "product_id": item.product_id,
+                "product_name": item.product.name if item.product else f"Product {item.product_id}",
+                "quantity_ordered": item.quantity_ordered,
+                "unit_price": float(item.unit_price),
+                "warehouse_id": item.warehouse_id,
+                "quantity_received": None,
+                "is_received": item.is_received == 't',
+                "received_date": item.received_date,
+                "notes": item.notes
+            }
+            for item in supply.items
+        ]
+    }
 
 
 def create_supply(db: Session, supply: SupplyCreate, created_by: str):
@@ -77,10 +163,10 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
     db_supply = Supply(
         supplier_id=supply.supplier_id,
         warehouse_id=supply.warehouse_id,
-        order_date=supply.shipment_date,  # Маппинг shipment_date -> order_date
-        expected_delivery=supply.expected_arrival_date,  # Маппинг expected_arrival_date -> expected_delivery
+        order_date=supply.shipment_date,
+        expected_delivery=supply.expected_arrival_date,
         status=supply.status.value if hasattr(supply.status, 'value') else str(supply.status),
-        total_amount=0,  # Рассчитаем позже
+        total_amount=0,
         notes=supply.notes,
         created_by=created_by,
         created_at=datetime.utcnow(),
@@ -88,7 +174,7 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
     )
 
     db.add(db_supply)
-    db.flush()  # Чтобы получить ID
+    db.flush()
 
     # Создаем элементы поставки
     total_amount = 0
@@ -105,7 +191,7 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
             quantity_ordered=item_data.quantity_ordered,
             unit_price=item_data.unit_price,
             warehouse_id=item_data.warehouse_id,
-            is_received='f',  # По умолчанию не получен
+            is_received='f',
             notes=item_data.notes
         )
 
@@ -124,7 +210,7 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
         joinedload(Supply.supplier)
     ).first()
 
-    # Формируем объект ответа с правильным маппингом полей
+    # Формируем объект ответа с правильными полями для схемы
     response_data = {
         "id": created_supply.id,
         "supplier_id": created_supply.supplier_id,
@@ -132,10 +218,12 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
         "warehouse_id": created_supply.warehouse_id,
         "warehouse_name": created_supply.warehouse.name if created_supply.warehouse else None,
         "status": created_supply.status,
-        "shipment_date": created_supply.order_date,  # Маппинг order_date -> shipment_date
-        "expected_arrival_date": created_supply.expected_delivery,  # Маппинг expected_delivery -> expected_arrival_date
-        "actual_arrival_date": created_supply.actual_arrival_date,
-        "reference_number": created_supply.reference_number,
+        "order_date": created_supply.order_date,  # Правильное поле для схемы
+        "shipment_date": created_supply.order_date,  # Для совместимости с фронтендом
+        "expected_delivery": created_supply.expected_delivery,  # Правильное поле для схемы
+        "expected_arrival_date": created_supply.expected_delivery,  # Для совместимости с фронтендом
+        "actual_arrival_date": getattr(created_supply, 'actual_arrival_date', None),
+        "reference_number": getattr(created_supply, 'reference_number', None),
         "notes": created_supply.notes,
         "total_amount": float(created_supply.total_amount),
         "created_by": created_supply.created_by,
@@ -150,7 +238,7 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
                 "quantity_ordered": item.quantity_ordered,
                 "unit_price": float(item.unit_price),
                 "warehouse_id": item.warehouse_id,
-                "quantity_received": item.quantity_received,
+                "quantity_received": None,  # Пока нет поля в БД
                 "is_received": item.is_received == 't',
                 "received_date": item.received_date,
                 "notes": item.notes
@@ -160,6 +248,7 @@ def create_supply(db: Session, supply: SupplyCreate, created_by: str):
     }
 
     return response_data
+
 
 # Остальные функции остаются без изменений...
 def update_supply(db: Session, supply_id: int, supply_update: SupplyUpdate) -> Optional[Supply]:
@@ -181,11 +270,11 @@ def update_supply(db: Session, supply_id: int, supply_update: SupplyUpdate) -> O
 
 def delete_supply(db: Session, supply_id: int) -> bool:
     """Удаление поставки"""
-    db_supply = get_supply(db, supply_id)
-    if not db_supply:
+    supply = db.query(Supply).filter(Supply.id == supply_id).first()
+    if not supply:
         return False
 
-    db.delete(db_supply)
+    db.delete(supply)
     db.commit()
     return True
 
@@ -216,7 +305,7 @@ def process_received_supply(db: Session, supply_id: int, username: str) -> bool:
     """
     Обработка полученной поставки путем создания движений запасов для каждого элемента.
     """
-    supply = get_supply(db, supply_id)
+    supply = db.query(Supply).filter(Supply.id == supply_id).first()
     if not supply:
         return False
 

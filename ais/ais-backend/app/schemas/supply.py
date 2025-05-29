@@ -88,26 +88,7 @@ class SupplyUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-class SupplyInDB(BaseModel):
-    id: int
-    supplier_id: int
-    warehouse_id: int
-    status: str
-    order_date: datetime
-    expected_delivery: Optional[datetime] = None
-    actual_arrival_date: Optional[datetime] = None
-    reference_number: Optional[str] = None
-    notes: Optional[str] = None
-    total_amount: float
-    created_by: str
-    created_at: datetime
-    updated_at: datetime
-    items: List[SupplyItemInDB] = []
-
-    model_config = ConfigDict(from_attributes=True, frozen=True)
-
-
-# Схема для ответа API
+# Схема для ответа API - используем поля БД напрямую
 class SupplyResponse(BaseModel):
     id: int
     supplier_id: int
@@ -115,8 +96,8 @@ class SupplyResponse(BaseModel):
     warehouse_id: int
     warehouse_name: Optional[str] = None
     status: str
-    shipment_date: datetime  # Соответствует order_date в БД
-    expected_arrival_date: Optional[datetime] = None  # Соответствует expected_delivery в БД
+    order_date: datetime  # Поле из БД
+    expected_delivery: Optional[datetime] = None  # Поле из БД
     actual_arrival_date: Optional[datetime] = None
     reference_number: Optional[str] = None
     notes: Optional[str] = None
