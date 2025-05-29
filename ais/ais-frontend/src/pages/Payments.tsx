@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Table, Tag, Button, Card, Select, Input, DatePicker, Typography, Space, Spin, Tooltip, Modal, Drawer, Form, notification, Row, Col, InputNumber, Tabs, Divider, Alert } from 'antd';
 import { 
   SearchOutlined, FilterOutlined, ReloadOutlined, EyeOutlined, EditOutlined, 
-  ExportOutlined, SyncOutlined, PlusOutlined, PrinterOutlined, 
+  SyncOutlined, PlusOutlined, PrinterOutlined, 
   CheckCircleOutlined, CloseCircleOutlined 
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -15,7 +15,7 @@ const { RangePicker } = DatePicker;
 const { TabPane } = Tabs;
 
 // Константы
-const CURRENT_DATE = '2025-05-28 16:38:56';
+const CURRENT_DATE = '2025-05-28 17:09:48';
 const CURRENT_USER = 'katarymba';
 const API_BASE_URL = 'http://localhost:8001/api';
 
@@ -153,7 +153,7 @@ const Payments: React.FC = () => {
         payment_method: 'credit_card',
         payment_status: 'completed',
         transaction_id: 'txn_123456789',
-        created_at: '2025-05-20T12:00:00Z',
+        created_at: '2025-05-25T10:15:00Z',
         amount: 5000,
         client_name: 'Иван Петров'
       },
@@ -161,8 +161,8 @@ const Payments: React.FC = () => {
         id: 2,
         order_id: 1002,
         payment_method: 'cash',
-        payment_status: 'pending',
-        created_at: '2025-05-21T14:30:00Z',
+        payment_status: 'completed',
+        created_at: '2025-05-26T12:00:00Z',
         amount: 7500,
         client_name: 'Анна Сидорова'
       },
@@ -172,7 +172,7 @@ const Payments: React.FC = () => {
         payment_method: 'online_wallet',
         payment_status: 'failed',
         transaction_id: 'txn_987654321',
-        created_at: '2025-05-22T09:15:00Z',
+        created_at: '2025-05-27T09:30:00Z',
         amount: 3200,
         client_name: 'Алексей Смирнов'
       },
@@ -182,9 +182,18 @@ const Payments: React.FC = () => {
         payment_method: 'bank_transfer',
         payment_status: 'completed',
         transaction_id: 'txn_456789123',
-        created_at: '2025-05-23T16:45:00Z',
+        created_at: '2025-05-28T14:30:00Z',
         amount: 12000,
-        client_name: 'Мария Иванова'
+        client_name: 'Иван Петров'
+      },
+      {
+        id: 5,
+        order_id: 1005,
+        payment_method: 'cash',
+        payment_status: 'completed',
+        created_at: '2025-05-28T16:45:00Z',
+        amount: 9500,
+        client_name: 'Алексей Смирнов'
       }
     ];
     
@@ -697,40 +706,53 @@ const Payments: React.FC = () => {
     }
   };
   
-  // Колонки для таблицы платежей
+  // Колонки для таблицы платежей - уменьшенные, для статичной таблицы без прокрутки
   const paymentColumns = [
     {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 80,
+      width: '7%',
       sorter: (a: Payment, b: Payment) => a.id - b.id
     },
     {
-      title: 'Дата',
+      title: 'ДАТА',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: 160,
+      width: '15%',
       render: (text: string) => formatDate(text)
     },
     {
-      title: 'Плательщик',
+      title: 'ПЛАТЕЛЬЩИК',
       dataIndex: 'payer_name',
       key: 'payer_name',
+      width: '20%',
       render: (text: string, record: Payment) => text || record.client_name || '-'
     },
     {
-      title: 'Метод оплаты',
+      title: 'МЕТОД',
       dataIndex: 'payment_method',
       key: 'payment_method',
-      width: 160,
-      render: (method: string) => getPaymentMethodText(method)
+      width: '15%',
+      render: (method: string) => {
+        // Используем более краткие названия для методов оплаты
+        switch (method) {
+          case PaymentMethod.ONLINE_CARD: return 'Онлайн карта';
+          case PaymentMethod.SBP: return 'СБП';
+          case PaymentMethod.CASH: return 'Наличные';
+          case PaymentMethod.CASH_ON_DELIVERY: return 'Нал. платеж';
+          case PaymentMethod.ONLINE_WALLET: return 'Эл. кошелек';
+          case PaymentMethod.BANK_TRANSFER: return 'Банк. перевод';
+          case PaymentMethod.CREDIT_CARD: return 'Кредит. карта';
+          default: return method || '-';
+        }
+      }
     },
     {
-      title: 'Статус',
+      title: 'СТАТУС',
       dataIndex: 'payment_status',
       key: 'payment_status',
-      width: 140,
+      width: '15%',
       render: (status: string) => {
         let color = 'default';
         let icon = null;
@@ -756,26 +778,29 @@ const Payments: React.FC = () => {
             break;
         }
         
-        return <Tag color={color} icon={icon}>{getPaymentStatusText(status)}</Tag>;
+        return (
+          <Tag color={color} icon={icon}>{
+            status === PaymentStatus.COMPLETED ? 'Завершен' :
+            status === PaymentStatus.PENDING ? 'Ожидает' :
+            status === PaymentStatus.PROCESSING ? 'В обработке' : 
+            status === PaymentStatus.REFUNDED ? 'Возвращен' :
+            status === PaymentStatus.FAILED ? 'Не удался' :
+            status === PaymentStatus.CANCELLED ? 'Отменен' : status
+          }</Tag>
+        );
       }
     },
     {
-      title: 'Сумма',
+      title: 'СУММА',
       dataIndex: 'amount',
       key: 'amount',
-      width: 140,
+      width: '13%',
       render: (amount: number) => formatPrice(amount || 0)
     },
     {
-      title: 'ID транзакции',
-      dataIndex: 'transaction_id',
-      key: 'transaction_id',
-      render: (text: string) => text || '-'
-    },
-    {
-      title: 'Действия',
+      title: 'ДЕЙСТВИЯ',
       key: 'actions',
-      width: 240,
+      width: '15%',
       render: (_, record: Payment) => (
         <Space>
           <Button 
@@ -789,28 +814,15 @@ const Payments: React.FC = () => {
             onClick={() => showEditPayment(record)}
             title="Редактировать"
           />
-          <Button 
-            icon={<PrinterOutlined />} 
-            onClick={() => printPaymentDetails(record.id)}
-            loading={paymentPrintLoading}
-            title="Печать"
-          />
-          <Button
-            danger
-            onClick={() => handleDeletePayment(record.id)}
-            title="Удалить"
-          >
-            Удалить
-          </Button>
-          {/* Кнопки для изменения статуса платежа */}
           {record.payment_status === PaymentStatus.PENDING && (
             <Button 
-              type="primary"
+              type="default"
               size="small"
               onClick={() => handleUpdatePaymentStatus(record.id, PaymentStatus.COMPLETED)}
               title="Подтвердить платеж"
+              style={{ backgroundColor: '#52c41a', color: 'white' }}
             >
-              Подтвердить
+              OK
             </Button>
           )}
         </Space>
@@ -820,92 +832,113 @@ const Payments: React.FC = () => {
   
   return (
     <div className="payments-page">
-      <Title level={2}>Управление платежами</Title>
+      <div className="page-header">
+        <Title level={2}>Управление платежами</Title>
+        <Button 
+          type="primary" 
+          size="large"
+          icon={<PlusOutlined />}
+          onClick={() => showNewPayment()}
+          className="create-payment-btn"
+        >
+          Создать новый платеж
+        </Button>
+      </div>
 
       {error && (
-          <div className="error-message">
-            <Alert message="Ошибка" description={error} type="error" showIcon closable />
-          </div>
+        <div className="error-message">
+          <Alert message="Ошибка" description={error} type="error" showIcon closable />
+        </div>
       )}
       
       <Card className="filter-card">
-        <Row gutter={16} align="middle">
-          <Col span={8}>
-            <Input 
-              placeholder="Поиск по ID платежа, ID транзакции или плательщику" 
-              value={paymentSearchText} 
-              onChange={(e) => setPaymentSearchText(e.target.value)} 
-              prefix={<SearchOutlined />} 
-            />
-          </Col>
-          <Col span={4}>
-            <Select 
-              placeholder="Статус платежа"
-              style={{ width: '100%' }}
-              value={paymentStatusFilter}
-              onChange={setPaymentStatusFilter}
-              allowClear
-            >
-              <Option value="pending">Ожидает оплаты</Option>
-              <Option value="processing">В обработке</Option>
-              <Option value="completed">Завершен</Option>
-              <Option value="refunded">Возвращен</Option>
-              <Option value="failed">Не удался</Option>
-              <Option value="cancelled">Отменен</Option>
-            </Select>
-          </Col>
-          <Col span={6}>
-            <RangePicker 
-              style={{ width: '100%' }}
-              onChange={(dates) => setPaymentDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs])}
-              format="DD.MM.YYYY"
-              placeholder={['Дата от', 'Дата до']}
-            />
-          </Col>
-          <Col span={6}>
-            <Space>
-              <Button 
-                icon={<FilterOutlined />} 
-                onClick={clearPaymentFilters}
-                title="Сбросить все фильтры"
+        <div className="filter-container">
+          <Row gutter={[8, 0]} align="middle" justify="space-between">
+            <Col xs={24} sm={12} md={7} lg={7} xl={7}>
+              <Input 
+                placeholder="Поиск по ID, транзакции или плательщику" 
+                value={paymentSearchText} 
+                onChange={(e) => setPaymentSearchText(e.target.value)} 
+                prefix={<SearchOutlined />} 
+                size="middle"
+                className="search-input"
+              />
+            </Col>
+            <Col xs={24} sm={12} md={4} lg={4} xl={4}>
+              <Select 
+                placeholder="Статус платежа"
+                style={{ width: '100%' }}
+                value={paymentStatusFilter}
+                onChange={setPaymentStatusFilter}
+                allowClear
+                size="middle"
+                className="status-select"
               >
-                Сбросить
-              </Button>
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={fetchPayments}
-                title="Обновить данные"
-              >
-                Обновить
-              </Button>
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />}
-                onClick={() => showNewPayment()}
-                title="Создать новый платеж"
-              >
-                Новый платеж
-              </Button>
-              <Button
-                icon={paymentSortByDate === 'asc' ? <SyncOutlined /> : <SyncOutlined rotate={180} />}
-                onClick={togglePaymentSortDirection}
-                title={paymentSortByDate === 'asc' ? 'Сортировать по убыванию' : 'Сортировать по возрастанию'}
-              >
-                {paymentSortByDate === 'asc' ? 'По возрастанию' : 'По убыванию'}
-              </Button>
-            </Space>
-          </Col>
-        </Row>
+                <Option value="pending">Ожидает оплаты</Option>
+                <Option value="processing">В обработке</Option>
+                <Option value="completed">Завершен</Option>
+                <Option value="refunded">Возвращен</Option>
+                <Option value="failed">Не удался</Option>
+                <Option value="cancelled">Отменен</Option>
+              </Select>
+            </Col>
+            <Col xs={24} sm={14} md={7} lg={7} xl={7}>
+              <RangePicker 
+                style={{ width: '100%' }}
+                onChange={(dates) => setPaymentDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs])}
+                format="DD.MM.YYYY"
+                placeholder={['Дата от', 'Дата до']}
+                size="middle"
+                className="date-picker"
+              />
+            </Col>
+            <Col xs={24} sm={10} md={6} lg={6} xl={6} style={{ textAlign: 'right' }}>
+              <div className="filter-actions">
+                <Button 
+                  icon={<FilterOutlined />} 
+                  onClick={clearPaymentFilters}
+                  title="Сбросить все фильтры"
+                  className="filter-button"
+                >
+                  Сбросить
+                </Button>
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  onClick={fetchPayments}
+                  title="Обновить данные"
+                  className="filter-button"
+                >
+                  Обновить
+                </Button>
+                <Button
+                  icon={paymentSortByDate === 'asc' ? <SyncOutlined /> : <SyncOutlined rotate={180} />}
+                  onClick={togglePaymentSortDirection}
+                  title={paymentSortByDate === 'asc' ? 'Сортировать по убыванию' : 'Сортировать по возрастанию'}
+                  className="filter-button sort-button"
+                >
+                  По {paymentSortByDate === 'asc' ? 'возр.' : 'убыв.'}
+                </Button>
+              </div>
+            </Col>
+          </Row>
+        </div>
       </Card>
       
-      <Card>
+      <Card className="table-card">
         <Table 
           dataSource={filteredPayments} 
           columns={paymentColumns}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `Всего ${total} записей` }}
-          scroll={{ x: 1300 }}
+          pagination={{ 
+            pageSize: 10, 
+            showSizeChanger: true, 
+            showTotal: (total) => `Всего ${total} записей`,
+            pageSizeOptions: ['10', '20', '50']
+          }}
+          size="middle"
+          bordered
+          className="payments-table"
         />
       </Card>
       
@@ -914,7 +947,7 @@ const Payments: React.FC = () => {
         title={`Детали платежа №${paymentDetails?.id || ''}`}
         width={600}
         onClose={() => setDetailsVisible(false)}
-        open={detailsVisible} // В более новых версиях Ant Design используется open вместо visible
+        open={detailsVisible}
         extra={
           <Space>
             <Button 
@@ -935,6 +968,34 @@ const Payments: React.FC = () => {
               Печать
             </Button>
           </Space>
+        }
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            {paymentDetails && paymentDetails.payment_status === PaymentStatus.PENDING && (
+              <Button 
+                type="primary" 
+                icon={<CheckCircleOutlined />}
+                onClick={() => {
+                  handleUpdatePaymentStatus(paymentDetails.id, PaymentStatus.COMPLETED);
+                  setDetailsVisible(false);
+                }}
+                style={{ marginRight: 8 }}
+              >
+                Подтвердить платеж
+              </Button>
+            )}
+            <Button 
+              danger
+              onClick={() => {
+                if (paymentDetails) {
+                  handleDeletePayment(paymentDetails.id);
+                  setDetailsVisible(false);
+                }
+              }}
+            >
+              Удалить платеж
+            </Button>
+          </div>
         }
       >
         {paymentDetails && (
@@ -1001,23 +1062,6 @@ const Payments: React.FC = () => {
                 <p>{paymentDetails.payment_details}</p>
               </>
             )}
-            
-            <Divider />
-            
-            {paymentDetails.payment_status === PaymentStatus.PENDING && (
-              <Row justify="center" style={{ marginTop: 20 }}>
-                <Button 
-                  type="primary" 
-                  icon={<CheckCircleOutlined />}
-                  onClick={() => {
-                    handleUpdatePaymentStatus(paymentDetails.id, PaymentStatus.COMPLETED);
-                    setDetailsVisible(false);
-                  }}
-                >
-                  Подтвердить платеж
-                </Button>
-              </Row>
-            )}
           </div>
         )}
       </Drawer>
@@ -1027,7 +1071,7 @@ const Payments: React.FC = () => {
         title={`Редактирование платежа №${paymentDetails?.id || ''}`}
         width={600}
         onClose={() => setPaymentEditVisible(false)}
-        open={paymentEditVisible} // В более новых версиях Ant Design используется open вместо visible
+        open={paymentEditVisible}
         extra={
           <Button 
             type="primary" 
@@ -1121,7 +1165,7 @@ const Payments: React.FC = () => {
         title="Создание нового платежа"
         width={600}
         onClose={() => setNewPaymentVisible(false)}
-        open={newPaymentVisible} // В более новых версиях Ant Design используется open вместо visible
+        open={newPaymentVisible}
         extra={
           <Button 
             type="primary" 
@@ -1282,6 +1326,92 @@ const Payments: React.FC = () => {
           </Form.Item>
         </Form>
       </Drawer>
+
+      {/* Добавляем CSS для стилизации компонентов */}
+      <style jsx>{`
+        .payments-page {
+          max-width: 100%;
+          padding: 20px;
+          margin: 0 auto;
+          background-color: var(--snow-white);
+        }
+        
+        .page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        
+        .create-payment-btn {
+          background-color: #0e6eab;
+          border-color: #0e6eab;
+        }
+        
+        .filter-card {
+          margin-bottom: 20px;
+          border-radius: 8px;
+        }
+        
+        .filter-container {
+          padding: 5px 0;
+        }
+        
+        .filter-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        
+        .filter-button {
+          padding: 0 12px;
+          height: 32px;
+          display: inline-flex;
+          align-items: center;
+        }
+        
+        .sort-button {
+          white-space: nowrap;
+        }
+        
+        .table-card {
+          border-radius: 8px;
+        }
+        
+        .payments-table {
+          margin-top: 0;
+        }
+        
+        .search-input, .status-select, .date-picker {
+          width: 100%;
+        }
+        
+        .error-message {
+          margin-bottom: 20px;
+        }
+        
+        /* Адаптивные стили */
+        @media (max-width: 768px) {
+          .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+          }
+          
+          .create-payment-btn {
+            width: 100%;
+          }
+          
+          .filter-actions {
+            margin-top: 10px;
+            width: 100%;
+          }
+          
+          .filter-button {
+            flex: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 };

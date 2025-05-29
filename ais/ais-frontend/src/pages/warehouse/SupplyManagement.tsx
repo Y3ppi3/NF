@@ -16,6 +16,7 @@ import {
 // Импортируем настроенный apiClient вместо axios
 import { apiClient, getAuthToken } from '../../utils/apiConfig';
 import { logAPIError } from '../../utils/debugHelper';
+import { API_FULL_URL } from '../../services/api';
 
 interface SupplyManagementProps {
   isLoading: boolean;
@@ -65,6 +66,11 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
 
   // Filtered shipments
   const filteredShipments = useMemo(() => {
+    // Ensure shipments is an array before calling sort
+    if (!Array.isArray(shipments)) {
+      return [];
+    }
+
     return shipments.sort((a, b) => {
       return new Date(b.shipment_date).getTime() - new Date(a.shipment_date).getTime();
     });
@@ -119,7 +125,7 @@ const SupplyManagement: React.FC<SupplyManagementProps> = ({
       };
 
       console.log("Подготовленные данные для отправки:", JSON.stringify(shipmentData, null, 2));
-      console.log("URL для отправки:", `${API_BASE_URL}/supplies/`);
+      console.log("URL для отправки:", `${API_FULL_URL}/supplies/`);
 
       // Попытка отправки с дополнительным логированием
       try {
